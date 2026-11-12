@@ -8,6 +8,7 @@ check:
     just nix::check
     just nushell::check
     just rust::check
+    just rust-architecture-check
     just woodpecker-check
 
 fix:
@@ -27,6 +28,9 @@ test:
 
 run *ARGS='':
     just rust::run {{ ARGS }}
+
+rust-architecture-check:
+    nu scripts/rust-architecture-check.nu src
 
 woodpecker-check:
     woodpecker-cli lint .woodpecker/*.yml
