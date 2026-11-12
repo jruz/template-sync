@@ -1,0 +1,18 @@
+#!/bin/sh
+echo "$*" >> "$GH_LOG"
+case "$1" in
+  repo)
+    printf '%s\n' $GH_REPOSITORIES
+    ;;
+  api)
+    path=${2#repos/*/}
+    name=${path%%/*}
+    file=${path#*/contents/}
+    directory="$GH_REMOTES/$name.git"
+    if [ -z "$file" ]; then
+      ls -p "$directory" | grep -v /
+    else
+      cat "$directory/$file"
+    fi
+    ;;
+esac

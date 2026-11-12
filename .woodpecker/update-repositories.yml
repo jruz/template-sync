@@ -1,0 +1,17 @@
+when:
+  - event: cron
+    cron: template-sync
+  - event: manual
+
+steps:
+  - name: UPDATE-REPOSITORIES
+    image: bash
+    environment:
+      GIT_AUTHOR_EMAIL: bot@jruz.io
+      GIT_AUTHOR_NAME: Woodpecker Bot
+      GIT_COMMITTER_EMAIL: bot@jruz.io
+      GIT_COMMITTER_NAME: Woodpecker Bot
+      GITHUB_TOKEN:
+        from_secret: GITHUB_TOKEN
+    commands:
+      - nix develop --command just run update-repositories --account jruz

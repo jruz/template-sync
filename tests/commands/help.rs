@@ -7,5 +7,9 @@ fn lists_commands() {
     let output = run(root, root, &["--help"]);
     assert!(output.status.success());
     let help = stdout(&output);
-    assert!(help.contains("version"));
+    assert!(
+        ["check", "update", "update-repositories", "version"]
+            .iter()
+            .all(|command| help.contains(command))
+    );
 }

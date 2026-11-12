@@ -1,14 +1,35 @@
 mod commands;
+mod core;
+mod libs;
 mod utils;
 
+use std::io::IsTerminal as _;
 use std::process::ExitCode;
 
 use clap::Parser as _;
-use commands::version;
+use commands::{check, init, update, update_repositories, version};
+use utils::error;
 use utils::output::Output;
+use utils::style::Style;
 
 #[derive(Debug, clap::Subcommand)]
 enum Command {
+    #[command(about = "Compare the project with its template")]
+    Check,
+    #[command(about = "Make the project follow the template that matches its files")]
+    Init,
+    #[command(about = "Update the project with its template files")]
+    Update {
+        #[arg(long, help = "List the files that would change without writing them")]
+        dry_run: bool,
+    },
+    #[command(about = "Open pull requests for every repository of an account that is out of sync")]
+    UpdateRepositories {
+        #[arg(long, help = "Report differences without pushing")]
+        dry_run: bool,
+        #[arg(long, help = "GitHub user or organisation to scan")]
+        account: String,
+    },
     #[command(about = "Print version and build metadata")]
     Version,
 }
@@ -23,17 +44,53 @@ struct Arguments {
     command: Command,
 }
 
-fn run(command: &Command) -> Output {
-    match command {
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error(transparent)]
+    Check(#[from] check::Error),
+    #[error(transparent)]
+    Init(#[from] init::Error),
+    #[error(transparent)]
+    Update(#[from] update::Error),
+    #[error(transparent)]
+    UpdateRepositories(#[from] update_repositories::Error),
+}
+
+fn run(command: Command, style: Style) -> Result<Output, Error> {
+    let output = match command {
+        Command::Check => check::run(style)?,
+        Command::Init => init::run()?,
+        Command::Update { dry_run } => update::run(dry_run, style)?,
+        Command::UpdateRepositories { dry_run, account } => {
+            update_repositories::run(&account, dry_run, style)?
+        }
         Command::Version => version::run(),
+    };
+    Ok(output)
+}
+
+fn style() -> Style {
+    if std::io::stdout().is_terminal() {
+        return Style::Color;
     }
+    Style::Plain
 }
 
 fn main() -> ExitCode {
     let arguments = Arguments::parse();
-    let output = run(&arguments.command);
-    print!("{}", output.text);
-    if output.success {
+    let chosen = style();
+    let success = match run(arguments.command, chosen) {
+        Ok(output) => {
+            print!("{}", output.text);
+            output.success
+        }
+        Err(error) => {
+            let chain = error::chain(&error);
+            eprintln!("error: {chain}");
+            false
+        }
+    };
+    if success {
         return ExitCode::SUCCESS;
     }
     ExitCode::FAILURE

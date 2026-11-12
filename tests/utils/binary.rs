@@ -31,3 +31,8 @@ pub fn stdout(output: &Output) -> String {
     let bytes = output.stdout.clone();
     String::from_utf8(bytes).expect("UTF-8 output")
 }
+
+pub fn stderr(output: &Output) -> String {
+    let bytes = output.stderr.clone();
+    String::from_utf8(bytes).expect("UTF-8 output")
+}
