@@ -25,16 +25,22 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
     let project = std::env::current_dir()?;
     let config = manifest::project(&project)?;
     let template = source::clone(&config.template)?;
-    let template_root = template.path();
-    let template_manifest = manifest::load(template_root)?;
-    let findings = snapshot::findings(&project, template_root, &template_manifest, &config)?;
+    let base = source::clone_at(&config.template, &config.revision)?;
+    let roots = snapshot::Roots {
+        base: base.path(),
+        project: &project,
+        template: template.path(),
+    };
+    let findings = snapshot::findings(&roots, &config)?;
     if dry_run {
         return Ok(Output {
             success: true,
             text: preview::render(&findings, style),
         });
     }
-    let written = apply::write(&project, template_root, &findings)?;
+    let written = apply::write(&project, roots.template, &findings)?;
+    let revision = source::head(&template)?;
+    manifest::record(&project, config, &revision)?;
     let updates = written
         .iter()
         .map(|path| format!("updated {path}\n"))
@@ -43,6 +49,6 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
     let rendered = report::render(&findings, style);
     Ok(Output {
         success: true,
-        text: format!("{updates}{rendered}"),
+        text: format!("{updates}revision {revision}\n{rendered}"),
     })
 }

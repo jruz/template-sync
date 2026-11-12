@@ -34,8 +34,12 @@ pub fn dirty(directory: &Path, paths: &[String]) -> Result<Vec<String>, Error> {
     Ok(lines)
 }
 
+fn url(repository: &str) -> String {
+    format!("https://x-access-token@github.com/{repository}.git")
+}
+
 pub fn clone(repository: &str, destination: &Path) -> Result<(), Error> {
-    let url = format!("https://x-access-token@github.com/{repository}.git");
+    let url = url(repository);
     git(
         destination,
         &[
@@ -50,6 +54,30 @@ pub fn clone(repository: &str, destination: &Path) -> Result<(), Error> {
         ],
     )?;
     Ok(())
+}
+
+pub fn clone_at(repository: &str, revision: &str, destination: &Path) -> Result<(), Error> {
+    let url = url(repository);
+    git(destination, &["init", "--quiet"])?;
+    git(
+        destination,
+        &[
+            "-c",
+            CREDENTIAL_HELPER,
+            "fetch",
+            "--quiet",
+            "--depth",
+            "1",
+            &url,
+            revision,
+        ],
+    )?;
+    git(destination, &["checkout", "--quiet", "FETCH_HEAD"])?;
+    Ok(())
+}
+
+pub fn head(directory: &Path) -> Result<String, Error> {
+    git(directory, &["rev-parse", "HEAD"])
 }
 
 pub fn is_clean(directory: &Path) -> Result<bool, Error> {

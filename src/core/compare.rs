@@ -1,14 +1,14 @@
 use crate::core::manifest;
-use crate::libs::document::{format, keys, section, text};
+use crate::libs::document::{format, keys, lines, text};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("cannot merge lines of {0}")]
+    Lines(String, #[source] lines::Error),
     #[error("cannot merge {0}")]
     Merge(String, #[source] text::Error),
     #[error("cannot parse {0}")]
     Parse(String, #[source] text::Error),
-    #[error("cannot merge sections of {0}")]
-    Section(String, #[source] section::Error),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +16,13 @@ pub enum Status {
     Changed,
     Matching,
     Missing,
+    Removed,
+}
+
+pub struct Contents<'text> {
+    pub base: Option<&'text str>,
+    pub project: Option<&'text str>,
+    pub template: &'text str,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -51,13 +58,17 @@ pub fn needs_review(finding: &Finding) -> bool {
     finding.status != Status::Matching && finding.strategy == manifest::Strategy::Review
 }
 
-fn unified_diff(path: &str, before: &str, after: &str) -> String {
-    let project = format!("project/{path}");
+fn labelled_diff(origin: &str, path: &str, before: &str, after: &str) -> String {
+    let from = format!("{origin}/{path}");
     let template = format!("template/{path}");
     similar::TextDiff::from_lines(before, after)
         .unified_diff()
-        .header(&project, &template)
+        .header(&from, &template)
         .to_string()
+}
+
+fn unified_diff(path: &str, before: &str, after: &str) -> String {
+    labelled_diff("project", path, before, after)
 }
 
 fn status(changed: bool) -> Status {
@@ -120,13 +131,39 @@ fn text(entry: &manifest::Entry, template: &str, project: &str) -> Result<Findin
     })
 }
 
+fn review(
+    entry: &manifest::Entry,
+    contents: &Contents<'_>,
+    project: &str,
+) -> Result<Finding, Error> {
+    let Some(base) = contents.base else {
+        return text(entry, contents.template, project);
+    };
+    let template = contents.template;
+    let found = detail(&entry.path, base, template)?;
+    let unchanged = base == template || project == template;
+    Ok(Finding {
+        content: template.to_owned(),
+        detail: found,
+        diff: labelled_diff("base", &entry.path, base, template),
+        path: entry.path.clone(),
+        status: status(!unchanged),
+        strategy: entry.strategy.clone(),
+    })
+}
+
 fn merged(
     path: &str,
-    template: &str,
+    contents: &Contents<'_>,
     project: &str,
     keys: &[String],
 ) -> Result<text::Merged, Error> {
-    match text::merge(path, template, project, keys) {
+    let sources = text::Sources {
+        base: contents.base,
+        project,
+        template: contents.template,
+    };
+    match text::merge(path, &sources, keys) {
         Ok(merged) => Ok(merged),
         Err(source) => {
             let owned = path.to_owned();
@@ -139,10 +176,10 @@ fn merged(
 fn data(
     entry: &manifest::Entry,
     keys: &[String],
-    template: &str,
+    contents: &Contents<'_>,
     project: &str,
 ) -> Result<Finding, Error> {
-    let text::Merged { after, before } = merged(&entry.path, template, project, keys)?;
+    let text::Merged { after, before } = merged(&entry.path, contents, project, keys)?;
     let diff = unified_diff(&entry.path, &before, &after);
     let changed = after != before;
     let found = detail(&entry.path, &before, &after)?;
@@ -156,19 +193,23 @@ fn data(
     })
 }
 
-fn sectioned(path: &str, template: &str, project: &str) -> Result<String, Error> {
-    match section::merge(template, project) {
+fn merged_lines(path: &str, contents: &Contents<'_>, project: &str) -> Result<String, Error> {
+    match lines::merge(contents.template, contents.base, project) {
         Ok(merged) => Ok(merged),
         Err(source) => {
             let owned = path.to_owned();
-            let error = Error::Section(owned, source);
+            let error = Error::Lines(owned, source);
             Err(error)
         }
     }
 }
 
-fn sections(entry: &manifest::Entry, template: &str, project: &str) -> Result<Finding, Error> {
-    let content = sectioned(&entry.path, template, project)?;
+fn line_merge(
+    entry: &manifest::Entry,
+    contents: &Contents<'_>,
+    project: &str,
+) -> Result<Finding, Error> {
+    let content = merged_lines(&entry.path, contents, project)?;
     let diff = unified_diff(&entry.path, project, &content);
     let changed = content != project;
     let found = line_changes(project, &content);
@@ -182,12 +223,21 @@ fn sections(entry: &manifest::Entry, template: &str, project: &str) -> Result<Fi
     })
 }
 
-pub fn finding(
-    entry: &manifest::Entry,
-    template: &str,
-    project: Option<&str>,
-) -> Result<Finding, Error> {
-    let Some(current) = project else {
+#[must_use]
+pub fn removal(entry: &manifest::Entry, project: &str) -> Finding {
+    Finding {
+        content: String::new(),
+        detail: Detail::Text,
+        diff: unified_diff(&entry.path, project, ""),
+        path: entry.path.clone(),
+        status: Status::Removed,
+        strategy: entry.strategy.clone(),
+    }
+}
+
+pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Finding, Error> {
+    let template = contents.template;
+    let Some(current) = contents.project else {
         return Ok(Finding {
             content: template.to_owned(),
             detail: Detail::Text,
@@ -198,9 +248,10 @@ pub fn finding(
         });
     };
     match &entry.strategy {
-        manifest::Strategy::Copy | manifest::Strategy::Review => text(entry, template, current),
-        manifest::Strategy::Merge(keys) => data(entry, keys, template, current),
-        manifest::Strategy::Section => sections(entry, template, current),
+        manifest::Strategy::Lines => line_merge(entry, contents, current),
+        manifest::Strategy::Merge(keys) => data(entry, keys, contents, current),
+        manifest::Strategy::Replace => text(entry, template, current),
+        manifest::Strategy::Review => review(entry, contents, current),
     }
 }
 
@@ -214,11 +265,68 @@ mod tests {
         template: &str,
         project: Option<&str>,
     ) -> Finding {
+        with_base(path, strategy, None, template, project)
+    }
+
+    fn with_base(
+        path: &str,
+        strategy: manifest::Strategy,
+        base: Option<&str>,
+        template: &str,
+        project: Option<&str>,
+    ) -> Finding {
         let entry = manifest::Entry {
             path: path.to_owned(),
             strategy,
         };
-        finding(&entry, template, project).expect("finding")
+        let contents = Contents {
+            base,
+            project,
+            template,
+        };
+        finding(&entry, &contents).expect("finding")
+    }
+
+    #[test]
+    fn reviews_match_when_the_template_did_not_change_since_base() {
+        let base = Some("new\n");
+        let project = Some("project\n");
+        let result = with_base(
+            "justfile",
+            manifest::Strategy::Review,
+            base,
+            "new\n",
+            project,
+        );
+        assert_eq!(result.status, Status::Matching);
+    }
+
+    #[test]
+    fn reviews_show_template_changes_since_base() {
+        let base = Some("old\n");
+        let project = Some("project\n");
+        let result = with_base(
+            "justfile",
+            manifest::Strategy::Review,
+            base,
+            "new\n",
+            project,
+        );
+        assert_eq!(result.status, Status::Changed);
+        assert!(result.diff.contains("--- base/justfile"));
+        assert!(result.diff.contains("-old"));
+        assert!(!result.diff.contains("project"));
+    }
+
+    #[test]
+    fn removals_need_update() {
+        let entry = manifest::Entry {
+            path: "scripts/old.nu".to_owned(),
+            strategy: manifest::Strategy::Replace,
+        };
+        let result = removal(&entry, "old\n");
+        assert_eq!(result.status, Status::Removed);
+        assert!(needs_update(&result));
     }
 
     fn engines(template: &str, project: &str) -> Finding {
@@ -235,7 +343,7 @@ mod tests {
 
     #[test]
     fn reports_missing_files_with_template_content() {
-        let result = compare("LICENSE", manifest::Strategy::Copy, "text\n", None);
+        let result = compare("LICENSE", manifest::Strategy::Replace, "text\n", None);
         assert_eq!(result.status, Status::Missing);
         assert_eq!(result.content, "text\n");
         assert!(result.diff.contains("+text"));
@@ -243,8 +351,8 @@ mod tests {
     }
 
     #[test]
-    fn reports_changed_copies_with_diff() {
-        let result = text_change("LICENSE", manifest::Strategy::Copy);
+    fn reports_changed_replacements_with_diff() {
+        let result = text_change("LICENSE", manifest::Strategy::Replace);
         assert_eq!(result.status, Status::Changed);
         assert!(result.diff.contains("-old"));
         assert!(result.diff.contains("+new"));

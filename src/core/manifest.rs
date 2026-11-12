@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::libs::document::format;
+
 pub const MANIFEST_FILE: &str = "template.json";
 pub const PROJECT_FILE: &str = "template-sync.json";
 
@@ -13,8 +15,12 @@ pub enum Error {
     Invalid(String, #[source] serde_json::Error),
     #[error("invalid template repository: {0}")]
     InvalidTemplate(String),
+    #[error("{MANIFEST_FILE} merges {0} by keys, but it is a line file")]
+    KeysOnLines(String),
     #[error("missing template file: {0}")]
     MissingFile(String),
+    #[error("{MANIFEST_FILE} merges {0} without keys")]
+    MissingKeys(String),
     #[error("non UTF-8 file name: {0:?}")]
     NonUtf8Name(OsString),
     #[error("project not initialized, run template-sync init")]
@@ -32,33 +38,33 @@ pub enum Error {
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Merge {
-    pub keys: Vec<String>,
+    pub keys: Option<Vec<String>>,
     pub path: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
-    pub copy: Vec<String>,
     pub merge: Vec<Merge>,
+    pub replace: Vec<String>,
     pub review: Vec<String>,
-    pub section: Vec<String>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub review: Option<Vec<String>>,
+    pub revision: String,
     pub template: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Strategy {
-    Copy,
+    Lines,
     Merge(Vec<String>),
+    Replace,
     Review,
-    Section,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -111,18 +117,31 @@ pub fn project(directory: &Path) -> Result<Project, Error> {
     parse_project(&text)
 }
 
-pub fn create(directory: &Path, template: &str) -> Result<(), Error> {
+fn save(directory: &Path, config: &Project) -> Result<(), Error> {
     let path = directory.join(PROJECT_FILE);
-    if path.exists() {
+    let text = serde_json::to_string_pretty(config).map_err(Error::Serialize)?;
+    let content = format!("{text}\n");
+    std::fs::write(&path, content).map_err(|source| Error::Write(path, source))
+}
+
+pub fn create(directory: &Path, template: &str, revision: &str) -> Result<(), Error> {
+    if directory.join(PROJECT_FILE).exists() {
         return Err(Error::AlreadyInitialized);
     }
     let config = Project {
         review: None,
+        revision: revision.to_owned(),
         template: template.to_owned(),
     };
-    let text = serde_json::to_string_pretty(&config).map_err(Error::Serialize)?;
-    let content = format!("{text}\n");
-    std::fs::write(&path, content).map_err(|source| Error::Write(path, source))
+    save(directory, &config)
+}
+
+pub fn record(directory: &Path, config: Project, revision: &str) -> Result<(), Error> {
+    let updated = Project {
+        revision: revision.to_owned(),
+        ..config
+    };
+    save(directory, &updated)
 }
 
 pub fn template_name(repository: &str) -> Result<&str, Error> {
@@ -208,12 +227,34 @@ fn expand_all(template: &Path, paths: &[String], strategy: &Strategy) -> Result<
     Ok(entries)
 }
 
+fn merge_strategy(merge: &Merge) -> Result<Strategy, Error> {
+    let structured = format::detect(&merge.path).is_some();
+    match (structured, &merge.keys) {
+        (true, Some(keys)) => {
+            let listed = keys.clone();
+            let strategy = Strategy::Merge(listed);
+            Ok(strategy)
+        }
+        (false, None) => Ok(Strategy::Lines),
+        (true, None) => {
+            let owned = merge.path.clone();
+            let error = Error::MissingKeys(owned);
+            Err(error)
+        }
+        (false, Some(_)) => {
+            let owned = merge.path.clone();
+            let error = Error::KeysOnLines(owned);
+            Err(error)
+        }
+    }
+}
+
 fn merge_entry(template: &Path, merge: &Merge) -> Result<Entry, Error> {
     expand(template, &merge.path)?;
-    let keys = merge.keys.clone();
+    let strategy = merge_strategy(merge)?;
     Ok(Entry {
         path: merge.path.clone(),
-        strategy: Strategy::Merge(keys),
+        strategy,
     })
 }
 
@@ -256,21 +297,47 @@ fn overridden(all: Vec<Entry>, project: &Project) -> Result<Vec<Entry>, Error> {
     Ok(entries)
 }
 
-pub fn entries(
-    manifest: &Manifest,
-    template: &Path,
-    project: &Project,
-) -> Result<Vec<Entry>, Error> {
-    let copies = expand_all(template, &manifest.copy, &Strategy::Copy)?;
+fn declared(manifest: &Manifest, template: &Path) -> Result<Vec<Entry>, Error> {
+    let replacements = expand_all(template, &manifest.replace, &Strategy::Replace)?;
     let merges = manifest
         .merge
         .iter()
         .map(|merge| merge_entry(template, merge))
         .collect::<Result<Vec<_>, Error>>()?;
-    let sections = expand_all(template, &manifest.section, &Strategy::Section)?;
     let reviews = expand_all(template, &manifest.review, &Strategy::Review)?;
-    let all = [copies, merges, sections, reviews].concat();
+    let all = [replacements, merges, reviews].concat();
+    Ok(all)
+}
+
+pub fn entries(
+    manifest: &Manifest,
+    template: &Path,
+    project: &Project,
+) -> Result<Vec<Entry>, Error> {
+    let all = declared(manifest, template)?;
     overridden(all, project)
+}
+
+fn reviewed_by(entry: Entry, project: &Project) -> Entry {
+    match &project.review {
+        Some(patterns) => reviewed(entry, patterns),
+        None => entry,
+    }
+}
+
+pub fn removed(
+    base_manifest: &Manifest,
+    base: &Path,
+    template: &Path,
+    project: &Project,
+) -> Result<Vec<Entry>, Error> {
+    let gone = declared(base_manifest, base)?
+        .into_iter()
+        .map(|entry| reviewed_by(entry, project))
+        .filter(|entry| entry.strategy != Strategy::Review)
+        .filter(|entry| !template.join(&entry.path).exists())
+        .collect();
+    Ok(gone)
 }
 
 #[cfg(test)]
@@ -293,24 +360,31 @@ mod tests {
         paths.iter().map(|path| (*path).to_owned()).collect()
     }
 
-    fn manifest(copy: &[&str], merge: &[&str], section: &[&str], review: &[&str]) -> Manifest {
+    fn merges(paths: &[&str], keys: Option<&[&str]>) -> Vec<Merge> {
+        paths
+            .iter()
+            .map(|path| Merge {
+                keys: keys.map(owned),
+                path: (*path).to_owned(),
+            })
+            .collect()
+    }
+
+    fn manifest(replace: &[&str], merge: &[&str], lines: &[&str], review: &[&str]) -> Manifest {
+        let scripts: Option<&[&str]> = Some(&["scripts"]);
+        let keyed = merges(merge, scripts);
+        let unkeyed = merges(lines, None);
         Manifest {
-            copy: owned(copy),
-            merge: merge
-                .iter()
-                .map(|path| Merge {
-                    keys: owned(&["scripts"]),
-                    path: (*path).to_owned(),
-                })
-                .collect(),
+            merge: keyed.into_iter().chain(unkeyed).collect(),
+            replace: owned(replace),
             review: owned(review),
-            section: owned(section),
         }
     }
 
     fn project(review: &[&str]) -> Project {
         Project {
             review: owned(review).into(),
+            revision: "base".to_owned(),
             template: "jruz/template-rs".to_owned(),
         }
     }
@@ -357,12 +431,34 @@ mod tests {
         assert_eq!(
             strategies,
             [
-                Strategy::Copy,
+                Strategy::Replace,
                 Strategy::Merge(keys),
-                Strategy::Section,
+                Strategy::Lines,
                 Strategy::Review
             ]
         );
+    }
+
+    #[test]
+    fn rejects_structured_merges_without_keys() {
+        let template = tempfile::tempdir().expect("temporary directory");
+        let root = template.path();
+        write_all(root, &["package.json"]);
+        let declared = manifest(&[], &[], &["package.json"], &[]);
+        let config = project(&[]);
+        let result = entries(&declared, root, &config);
+        assert!(matches!(result, Err(Error::MissingKeys(path)) if path == "package.json"));
+    }
+
+    #[test]
+    fn rejects_line_merges_with_keys() {
+        let template = tempfile::tempdir().expect("temporary directory");
+        let root = template.path();
+        write_all(root, &[".gitignore"]);
+        let declared = manifest(&[], &[".gitignore"], &[], &[]);
+        let config = project(&[]);
+        let result = entries(&declared, root, &config);
+        assert!(matches!(result, Err(Error::KeysOnLines(path)) if path == ".gitignore"));
     }
 
     #[test]
@@ -391,7 +487,7 @@ mod tests {
             strategies,
             [
                 ("LICENSE".to_owned(), Strategy::Review),
-                (".envrc".to_owned(), Strategy::Copy),
+                (".envrc".to_owned(), Strategy::Replace),
                 ("lib/a.ts".to_owned(), Strategy::Review)
             ]
         );
@@ -409,15 +505,54 @@ mod tests {
     }
 
     #[test]
+    fn lists_synced_files_the_template_removed() {
+        let base_directory = tempfile::tempdir().expect("temporary directory");
+        let template_directory = tempfile::tempdir().expect("temporary directory");
+        let base = base_directory.path();
+        let template = template_directory.path();
+        write_all(base, &["LICENSE", "lib/a.ts", "lib/b.ts", "justfile"]);
+        write_all(template, &["LICENSE", "lib/a.ts"]);
+        let declared = manifest(&["LICENSE", "lib/"], &[], &[], &["justfile"]);
+        let config = project(&[]);
+        let gone = removed(&declared, base, template, &config).expect("removed");
+        let paths = gone
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(paths, ["lib/b.ts"]);
+    }
+
+    #[test]
+    fn keeps_removed_files_the_project_reviews() {
+        let base_directory = tempfile::tempdir().expect("temporary directory");
+        let template_directory = tempfile::tempdir().expect("temporary directory");
+        let base = base_directory.path();
+        let template = template_directory.path();
+        write_all(base, &["LICENSE"]);
+        let declared = manifest(&["LICENSE"], &[], &[], &[]);
+        let config = project(&["LICENSE"]);
+        let gone = removed(&declared, base, template, &config).expect("removed");
+        assert_eq!(gone, []);
+    }
+
+    #[test]
     fn accepts_projects_without_reviews() {
-        let parsed = parse_project(r#"{"template": "jruz/template-ts"}"#).expect("project");
+        let parsed = parse_project(r#"{"revision": "base", "template": "jruz/template-ts"}"#)
+            .expect("project");
         assert_eq!(parsed.review, None);
     }
 
     #[test]
+    fn rejects_projects_without_revision() {
+        let result = parse_project(r#"{"template": "jruz/template-ts"}"#);
+        assert!(matches!(result, Err(Error::Invalid(..))));
+    }
+
+    #[test]
     fn rejects_unknown_fields() {
-        let result =
-            parse_project(r#"{"review": [], "template": "jruz/template-ts", "extra": true}"#);
+        let result = parse_project(
+            r#"{"review": [], "revision": "base", "template": "jruz/template-ts", "extra": true}"#,
+        );
         assert!(matches!(result, Err(Error::Invalid(..))));
     }
 }

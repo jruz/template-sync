@@ -13,6 +13,12 @@ pub enum Error {
     Read(PathBuf, #[source] std::io::Error),
 }
 
+pub struct Roots<'path> {
+    pub base: &'path Path,
+    pub project: &'path Path,
+    pub template: &'path Path,
+}
+
 fn read_error(path: &Path, source: std::io::Error) -> Error {
     let owned = path.to_path_buf();
     Error::Read(owned, source)
@@ -47,28 +53,52 @@ fn read_optional(path: &Path) -> Result<Option<String>, Error> {
     Ok(found)
 }
 
-fn entry_finding(
-    project: &Path,
-    template: &Path,
-    entry: &manifest::Entry,
-) -> Result<compare::Finding, Error> {
-    let template_path = template.join(&entry.path);
-    let project_path = project.join(&entry.path);
-    let expected = read(&template_path)?;
-    let actual = read_optional(&project_path)?;
-    let actual_text = actual.as_deref();
-    let compared = compare::finding(entry, &expected, actual_text)?;
+fn read_in(root: &Path, path: &str) -> Result<Option<String>, Error> {
+    let target = root.join(path);
+    read_optional(&target)
+}
+
+fn entry_finding(roots: &Roots<'_>, entry: &manifest::Entry) -> Result<compare::Finding, Error> {
+    let template_path = roots.template.join(&entry.path);
+    let template = read(&template_path)?;
+    let base = read_in(roots.base, &entry.path)?;
+    let project = read_in(roots.project, &entry.path)?;
+    let contents = compare::Contents {
+        base: base.as_deref(),
+        project: project.as_deref(),
+        template: &template,
+    };
+    let compared = compare::finding(entry, &contents)?;
     Ok(compared)
 }
 
+fn removal(roots: &Roots<'_>, entry: &manifest::Entry) -> Result<Option<compare::Finding>, Error> {
+    let project = read_in(roots.project, &entry.path)?;
+    let found = project.map(|text| compare::removal(entry, &text));
+    Ok(found)
+}
+
+fn removals(roots: &Roots<'_>, config: &manifest::Project) -> Result<Vec<compare::Finding>, Error> {
+    let base_manifest = manifest::load(roots.base)?;
+    let gone = manifest::removed(&base_manifest, roots.base, roots.template, config)?;
+    let found = gone
+        .iter()
+        .map(|entry| removal(roots, entry))
+        .collect::<Result<Vec<_>, _>>()?;
+    let present = found.into_iter().flatten().collect();
+    Ok(present)
+}
+
 pub fn findings(
-    project: &Path,
-    template: &Path,
-    manifest: &manifest::Manifest,
+    roots: &Roots<'_>,
     config: &manifest::Project,
 ) -> Result<Vec<compare::Finding>, Error> {
-    manifest::entries(manifest, template, config)?
+    let template_manifest = manifest::load(roots.template)?;
+    let current = manifest::entries(&template_manifest, roots.template, config)?
         .iter()
-        .map(|entry| entry_finding(project, template, entry))
-        .collect()
+        .map(|entry| entry_finding(roots, entry))
+        .collect::<Result<Vec<_>, _>>()?;
+    let gone = removals(roots, config)?;
+    let all = current.into_iter().chain(gone).collect();
+    Ok(all)
 }

@@ -33,6 +33,12 @@ pub struct Merged {
     pub before: String,
 }
 
+pub struct Sources<'text> {
+    pub base: Option<&'text str>,
+    pub project: &'text str,
+    pub template: &'text str,
+}
+
 struct Codec {
     parse: fn(&str) -> Result<Value, Error>,
     print: fn(&Value) -> Result<String, Error>,
@@ -58,18 +64,20 @@ fn print_yaml(value: &Value) -> Result<String, Error> {
     Ok(yaml)
 }
 
-fn values(codec: &Codec, template: &str, project: &str, keys: &[String]) -> Result<Merged, Error> {
-    let expected = (codec.parse)(template)?;
-    let current = (codec.parse)(project)?;
-    let merged = merge::keys(&expected, &current, keys)?;
+fn values(codec: &Codec, sources: &Sources<'_>, keys: &[String]) -> Result<Merged, Error> {
+    let expected = (codec.parse)(sources.template)?;
+    let previous = sources.base.map(codec.parse).transpose()?;
+    let current = (codec.parse)(sources.project)?;
+    let base = previous.as_ref();
+    let merged = merge::keys(&expected, base, &current, keys)?;
     let before = (codec.print)(&current)?;
     let after = (codec.print)(&merged)?;
     Ok(Merged { after, before })
 }
 
-fn document(template: &str, project: &str, keys: &[String]) -> Result<Merged, Error> {
-    let after = toml::keys(template, project, keys)?;
-    let before = project.to_owned();
+fn document(sources: &Sources<'_>, keys: &[String]) -> Result<Merged, Error> {
+    let after = toml::keys(sources.template, sources.base, sources.project, keys)?;
+    let before = sources.project.to_owned();
     Ok(Merged { after, before })
 }
 
@@ -95,16 +103,16 @@ pub fn changes(
     Ok(found)
 }
 
-pub fn merge(path: &str, template: &str, project: &str, keys: &[String]) -> Result<Merged, Error> {
+pub fn merge(path: &str, sources: &Sources<'_>, keys: &[String]) -> Result<Merged, Error> {
     let Some(kind) = format::detect(path) else {
         let owned = path.to_owned();
         let error = Error::Unsupported(owned);
         return Err(error);
     };
     match kind {
-        format::Format::Json => values(&JSON, template, project, keys),
-        format::Format::Toml => document(template, project, keys),
-        format::Format::Yaml => values(&YAML, template, project, keys),
+        format::Format::Json => values(&JSON, sources, keys),
+        format::Format::Toml => document(sources, keys),
+        format::Format::Yaml => values(&YAML, sources, keys),
     }
 }
 
@@ -116,7 +124,12 @@ mod tests {
     fn round_trips_json_preserving_key_order() {
         let text = "{\n  \"b\": 1,\n  \"a\": [\n    \"x\"\n  ]\n}\n";
         let keys = vec!["a".to_owned()];
-        let merged = merge("package.json", text, text, &keys).expect("merge");
+        let sources = Sources {
+            base: None,
+            project: text,
+            template: text,
+        };
+        let merged = merge("package.json", &sources, &keys).expect("merge");
         assert_eq!(merged.after, text);
         assert_eq!(merged.before, text);
     }

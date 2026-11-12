@@ -44,10 +44,11 @@ fn file_heading(finding: &compare::Finding) -> Heading {
     if is_review(finding) {
         return Heading::Review;
     }
-    if finding.status == compare::Status::Missing {
-        return Heading::Missing;
+    match finding.status {
+        compare::Status::Missing => Heading::Missing,
+        compare::Status::Removed => Heading::Removed,
+        compare::Status::Changed | compare::Status::Matching => Heading::Changed,
     }
-    Heading::Changed
 }
 
 fn key_heading(finding: &compare::Finding, kind: &keys::Kind) -> Heading {
@@ -112,7 +113,11 @@ fn lines_block(style: Style, finding: &compare::Finding, lines: &compare::Lines)
 fn text_block(style: Style, finding: &compare::Finding) -> String {
     let kind = file_heading(finding);
     let title = heading(style, kind, &finding.path);
-    if finding.status == compare::Status::Missing && !is_review(finding) {
+    let listed_only = matches!(
+        finding.status,
+        compare::Status::Missing | compare::Status::Removed
+    );
+    if listed_only && !is_review(finding) {
         return title;
     }
     format!("{title}{}", finding.diff)
@@ -135,9 +140,10 @@ fn label(finding: &compare::Finding) -> &'static str {
         (manifest::Strategy::Review, compare::Status::Changed | compare::Status::Missing) => {
             "review"
         }
+        (_, compare::Status::Removed) => "removed",
         (_, compare::Status::Missing) => "missing",
         (
-            manifest::Strategy::Copy | manifest::Strategy::Merge(_) | manifest::Strategy::Section,
+            manifest::Strategy::Lines | manifest::Strategy::Merge(_) | manifest::Strategy::Replace,
             compare::Status::Changed,
         ) => "changed",
     }
@@ -163,11 +169,16 @@ fn group(style: Style, pending: &[&compare::Finding], kind: Heading) -> Option<S
 }
 
 fn summary(style: Style, pending: &[&compare::Finding]) -> String {
-    [Heading::Missing, Heading::Changed, Heading::Review]
-        .into_iter()
-        .filter_map(|kind| group(style, pending, kind))
-        .collect::<Vec<_>>()
-        .join("\n")
+    [
+        Heading::Missing,
+        Heading::Changed,
+        Heading::Removed,
+        Heading::Review,
+    ]
+    .into_iter()
+    .filter_map(|kind| group(style, pending, kind))
+    .collect::<Vec<_>>()
+    .join("\n")
 }
 
 #[must_use]
@@ -250,12 +261,12 @@ mod tests {
             finding(
                 "LICENSE",
                 compare::Status::Matching,
-                manifest::Strategy::Copy,
+                manifest::Strategy::Replace,
             ),
             finding(
                 ".oxlintrc.json",
                 compare::Status::Changed,
-                manifest::Strategy::Copy,
+                manifest::Strategy::Replace,
             ),
             finding(
                 "justfile",
@@ -281,7 +292,7 @@ mod tests {
         let matching = finding(
             "LICENSE",
             compare::Status::Matching,
-            manifest::Strategy::Copy,
+            manifest::Strategy::Replace,
         );
         let output = render(&[matching], Style::Plain);
         assert_eq!(output, "in sync\n");
@@ -300,11 +311,11 @@ mod tests {
     }
 
     #[test]
-    fn lists_missing_copies_without_content() {
+    fn lists_missing_replacements_without_content() {
         let missing = finding(
             "LICENSE",
             compare::Status::Missing,
-            manifest::Strategy::Copy,
+            manifest::Strategy::Replace,
         );
         let output = render(&[missing], Style::Plain);
         assert_eq!(output, "MISSING LICENSE\n\nMISSING (1)\n  LICENSE\n");
@@ -338,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_section_lines() {
+    fn lists_merged_lines() {
         let lines = compare::Lines {
             missing: vec!["/tmp/*".to_owned()],
             removed: vec!["old".to_owned()],
@@ -346,11 +357,11 @@ mod tests {
         let base = finding(
             ".gitignore",
             compare::Status::Changed,
-            manifest::Strategy::Section,
+            manifest::Strategy::Lines,
         );
         let detail = compare::Detail::Lines(lines);
-        let sectioned = with_detail(base, detail);
-        let output = render(&[sectioned], Style::Plain);
+        let merged = with_detail(base, detail);
+        let output = render(&[merged], Style::Plain);
         assert!(output.starts_with("CHANGED .gitignore\n  missing: /tmp/*\n  removed: old\n"));
     }
 

@@ -42,33 +42,34 @@ pub struct Repository {
 }
 
 struct Checkout<'run> {
+    config: &'run manifest::Project,
     findings: &'run [compare::Finding],
     project: &'run Path,
     template: &'run Path,
-    template_repository: &'run str,
 }
 
 fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
-    let name = manifest::template_name(checkout.template_repository)?;
+    let template_repository = checkout.config.template.as_str();
+    let name = manifest::template_name(template_repository)?;
     let branch = format!("template-sync/{name}");
     let base = git::branch(checkout.project)?;
     let revision = git::revision(checkout.template)?;
+    let head = git::head(checkout.template)?;
     git::checkout(checkout.project, &branch)?;
     apply::write(checkout.project, checkout.template, checkout.findings)?;
+    let config = checkout.config.clone();
+    manifest::record(checkout.project, config, &head)?;
     if git::is_clean(checkout.project)? {
         return Ok(Outcome::InSync);
     }
-    let title = format!(
-        "[tool] Template: Sync with {}",
-        checkout.template_repository
-    );
+    let title = format!("[tool] Template: Sync with {template_repository}");
     let message = format!("{title}@{revision}");
     git::commit_all(checkout.project, &message)?;
     if git::matches_remote(checkout.project, &branch)? {
         return Ok(Outcome::Unchanged);
     }
     git::push(checkout.project, &branch)?;
-    let body = report::markdown(checkout.template_repository, &revision, checkout.findings);
+    let body = report::markdown(template_repository, &revision, checkout.findings);
     let request = github::PullRequest {
         base,
         body,
@@ -90,13 +91,19 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
     let template = tempfile::tempdir_in(workspace)?;
     let template_path = template.path();
     git::clone(&project_config.template, template_path)?;
-    let template_manifest = manifest::load(template_path)?;
-    let findings = snapshot::findings(
-        project_path,
-        template_path,
-        &template_manifest,
-        &project_config,
+    let base = tempfile::tempdir_in(workspace)?;
+    let base_path = base.path();
+    git::clone_at(
+        &project_config.template,
+        &project_config.revision,
+        base_path,
     )?;
+    let roots = snapshot::Roots {
+        base: base_path,
+        project: project_path,
+        template: template_path,
+    };
+    let findings = snapshot::findings(&roots, &project_config)?;
     if !report::failed(&findings) {
         return Ok(Outcome::InSync);
     }
@@ -106,10 +113,10 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
         return Ok(pending);
     }
     publish(&Checkout {
+        config: &project_config,
         findings: &findings,
         project: project_path,
         template: template_path,
-        template_repository: &project_config.template,
     })
 }
 

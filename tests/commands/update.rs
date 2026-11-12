@@ -1,11 +1,14 @@
 use crate::utils::binary::{run, stderr, stdout};
-use crate::utils::fixtures::{project, read, remotes, write_all};
+use crate::utils::fixtures::{
+    commit_changes, git, project, project_file, read, remotes, template_directory,
+    template_revision, write_all,
+};
 
 #[test]
 fn writes_project_and_keeps_review_files() {
     let remotes = remotes();
     let origin = remotes.path();
-    let project = project();
+    let project = project(&remotes);
     let root = project.path();
     let updated = run(root, origin, &["update"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
@@ -21,10 +24,45 @@ fn writes_project_and_keeps_review_files() {
 }
 
 #[test]
+fn records_template_revision() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    write_all(&template, &[("README.md", "template\n")]);
+    commit_changes(&template);
+    let revision = template_revision(&remotes);
+    let updated = run(root, origin, &["update"]);
+    assert!(updated.status.success(), "{}", stderr(&updated));
+    assert!(read(root, "template-sync.json").contains(&revision));
+}
+
+#[test]
+fn deletes_files_the_template_removed_since_revision() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    write_all(root, &[("scripts/lib/log.ts", "export {};\n")]);
+    commit_changes(root);
+    let template = template_directory(&remotes);
+    git(&template, &["rm", "--quiet", "scripts/lib/log.ts"]);
+    write_all(&template, &[("scripts/lib/run.ts", "export {};\n")]);
+    commit_changes(&template);
+    let previewed = run(root, origin, &["update", "--dry-run"]);
+    assert!(stdout(&previewed).contains("DELETED (1)\n  scripts/lib/log.ts\n"));
+    let updated = run(root, origin, &["update"]);
+    assert!(updated.status.success(), "{}", stderr(&updated));
+    assert!(!root.join("scripts/lib/log.ts").exists());
+    assert_eq!(read(root, "scripts/lib/run.ts"), "export {};\n");
+}
+
+#[test]
 fn dry_run_lists_files_without_writing() {
     let remotes = remotes();
     let origin = remotes.path();
-    let project = project();
+    let project = project(&remotes);
     let root = project.path();
     let output = run(root, origin, &["update", "--dry-run"]);
     assert!(output.status.success(), "{}", stderr(&output));
@@ -39,21 +77,21 @@ fn dry_run_lists_files_without_writing() {
 fn keeps_files_the_project_reviews() {
     let remotes = remotes();
     let origin = remotes.path();
-    let project = project();
+    let project = project(&remotes);
     let root = project.path();
-    let reviewing = "{ \"review\": [\"LICENSE\"], \"template\": \"jruz/template-ts\" }\n";
-    write_all(root, &[("template-sync.json", reviewing)]);
+    let revision = template_revision(&remotes);
+    let reviewing = project_file(&revision, "\"LICENSE\"");
+    write_all(root, &[("template-sync.json", &reviewing)]);
     let updated = run(root, origin, &["update"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert_eq!(read(root, "LICENSE"), "old licence\n");
-    assert!(stdout(&updated).contains("REVIEW LICENSE\n"));
 }
 
 #[test]
 fn refuses_uncommitted_targets() {
     let remotes = remotes();
     let origin = remotes.path();
-    let project = project();
+    let project = project(&remotes);
     let root = project.path();
     write_all(root, &[("LICENSE", "edited\n")]);
     let updated = run(root, origin, &["update"]);

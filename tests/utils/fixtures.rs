@@ -4,24 +4,26 @@ use std::process::Command;
 use crate::utils::binary::{stderr, stdout};
 
 const MANIFEST: &str = r#"{
-  "copy": ["LICENSE", "scripts/"],
   "merge": [{ "keys": ["devDependencies"], "path": "package.json" }],
-  "review": ["justfile"],
-  "section": []
+  "replace": ["LICENSE", "scripts/"],
+  "review": ["justfile"]
 }
 "#;
 
-const PROJECT: &str = "{ \"review\": [], \"template\": \"jruz/template-ts\" }\n";
-
-const PROJECT_FILES: [(&str, &str); 4] = [
+const PROJECT_FILES: [(&str, &str); 3] = [
     ("LICENSE", "old licence\n"),
     (
         "package.json",
         "{\n  \"name\": \"project\",\n  \"devDependencies\": {\n    \"oxlint\": \"1.0.0\"\n  }\n}\n",
     ),
     ("justfile", "check:\n    just test\n"),
-    ("template-sync.json", PROJECT),
 ];
+
+pub fn project_file(revision: &str, review: &str) -> String {
+    format!(
+        "{{ \"review\": [{review}], \"revision\": \"{revision}\", \"template\": \"jruz/template-ts\" }}\n"
+    )
+}
 
 pub fn write_all(root: &Path, files: &[(&str, &str)]) {
     files
@@ -47,6 +49,10 @@ pub fn git(directory: &Path, arguments: &[&str]) -> String {
 
 fn commit_all(root: &Path) {
     git(root, &["init", "--quiet"]);
+    commit_changes(root);
+}
+
+pub fn commit_changes(root: &Path) {
     git(root, &["add", "--all"]);
     git(
         root,
@@ -87,18 +93,29 @@ pub fn template_directory(remotes: &tempfile::TempDir) -> PathBuf {
     remotes.path().join("template-ts.git")
 }
 
+pub fn template_revision(remotes: &tempfile::TempDir) -> String {
+    let template = template_directory(remotes);
+    git(&template, &["rev-parse", "HEAD"]).trim().to_owned()
+}
+
+fn project_files(root: &Path, remotes: &tempfile::TempDir) {
+    let revision = template_revision(remotes);
+    let config = project_file(&revision, "");
+    write_all(root, &PROJECT_FILES);
+    write_all(root, &[("template-sync.json", &config)]);
+    commit_all(root);
+}
+
 pub fn remote_project(remotes: &tempfile::TempDir, name: &str) -> PathBuf {
     let root = remotes.path().join(format!("{name}.git"));
-    write_all(&root, &PROJECT_FILES);
-    commit_all(&root);
+    project_files(&root, remotes);
     root
 }
 
-pub fn project() -> tempfile::TempDir {
+pub fn project(remotes: &tempfile::TempDir) -> tempfile::TempDir {
     let directory = tempfile::tempdir().expect("temporary directory");
     let root = directory.path();
-    write_all(root, &PROJECT_FILES);
-    commit_all(root);
+    project_files(root, remotes);
     directory
 }
 

@@ -25,23 +25,27 @@ fn written(path: &Path, result: std::io::Result<()>) -> Result<(), Error> {
     }
 }
 
-fn copy(source: &Path, target: &Path) -> std::io::Result<()> {
+fn replace(source: &Path, target: &Path) -> std::io::Result<()> {
     std::fs::copy(source, target)?;
     Ok(())
 }
 
 fn write_file(project: &Path, template: &Path, finding: &compare::Finding) -> Result<(), Error> {
     let target = project.join(&finding.path);
+    if finding.status == compare::Status::Removed {
+        let removed = std::fs::remove_file(&target);
+        return written(&target, removed);
+    }
     if let Some(parent) = target.parent() {
         let created = std::fs::create_dir_all(parent);
         written(parent, created)?;
     }
     let result = match finding.strategy {
-        manifest::Strategy::Copy => {
+        manifest::Strategy::Replace => {
             let source = template.join(&finding.path);
-            copy(&source, &target)
+            replace(&source, &target)
         }
-        manifest::Strategy::Merge(_) | manifest::Strategy::Review | manifest::Strategy::Section => {
+        manifest::Strategy::Lines | manifest::Strategy::Merge(_) | manifest::Strategy::Review => {
             std::fs::write(&target, &finding.content)
         }
     };

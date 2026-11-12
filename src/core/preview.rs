@@ -5,11 +5,28 @@ use crate::utils::style::{self, Style};
 const MODIFIED: &str = "\x1b[33m";
 const OVERWRITTEN: &str = "\x1b[31m";
 
-fn paths(findings: &[compare::Finding], overwrites: bool) -> Vec<&str> {
+#[derive(PartialEq, Eq)]
+enum Action {
+    Deleted,
+    Modified,
+    Overwritten,
+}
+
+fn action(finding: &compare::Finding) -> Action {
+    if finding.status == compare::Status::Removed {
+        return Action::Deleted;
+    }
+    if finding.strategy == manifest::Strategy::Replace {
+        return Action::Overwritten;
+    }
+    Action::Modified
+}
+
+fn paths<'finding>(findings: &'finding [compare::Finding], wanted: &Action) -> Vec<&'finding str> {
     findings
         .iter()
         .filter(|finding| compare::needs_update(finding))
-        .filter(|finding| (finding.strategy == manifest::Strategy::Copy) == overwrites)
+        .filter(|finding| action(finding) == *wanted)
         .map(|finding| finding.path.as_str())
         .collect()
 }
@@ -30,11 +47,13 @@ fn section(style: Style, name: &str, color: &str, listed: &[&str]) -> Option<Str
 }
 
 pub fn render(findings: &[compare::Finding], style: Style) -> String {
-    let overwritten = paths(findings, true);
-    let modified = paths(findings, false);
+    let overwritten = paths(findings, &Action::Overwritten);
+    let modified = paths(findings, &Action::Modified);
+    let deleted = paths(findings, &Action::Deleted);
     let sections = [
         section(style, "OVERWRITTEN", OVERWRITTEN, &overwritten),
         section(style, "MODIFIED", MODIFIED, &modified),
+        section(style, "DELETED", OVERWRITTEN, &deleted),
     ]
     .into_iter()
     .flatten()
