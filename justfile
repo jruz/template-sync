@@ -1,24 +1,18 @@
 mod rust '.just/rust.justfile'
-mod nix '.just/nix.justfile'
-mod nushell '.just/nushell.justfile'
-import '.just/release.justfile'
+mod release '.just/release.justfile'
+mod just '.just/just.justfile'
+mod git '.just/git.justfile'
 
 check:
-    just just-fmt-check
-    just nix::check
-    just nushell::check
+    just just::fmt-check
     just rust::check
-    just rust-architecture-check
-    just woodpecker-check
 
 fix:
-    just just-fmt-fix
-    just nix::fix
-    just nushell::fix
+    just just::fmt-fix
     just rust::fix
 
 setup:
-    just git-hooks
+    just git::hooks-setup
 
 install:
     just rust::install
@@ -28,23 +22,3 @@ test:
 
 run *ARGS='':
     just rust::run {{ ARGS }}
-
-rust-architecture-check:
-    nu scripts/rust-architecture-check.nu src
-
-woodpecker-check:
-    woodpecker-cli lint .woodpecker/*.yml
-
-just-fmt-check:
-    just \
-        --unstable \
-        --fmt \
-        --check
-
-just-fmt-fix:
-    just \
-        --unstable \
-        --fmt
-
-git-hooks:
-    git config --local core.hooksPath .githooks
