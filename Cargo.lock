@@ -152,7 +152,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "template-rust"
+name = "template-sync"
 version = "0.1.0"
 dependencies = [
  "clap",

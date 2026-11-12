@@ -1,8 +1,8 @@
 {
-  "repository": "jruz/template-rust",
+  "repository": "jruz/template-sync",
   "settings": {
-    "description": "Rust CLI template with Clap, sandboxed builds, Nix flake and Woodpecker releases",
-    "private": false,
+    "description": "Keep repositories in sync with their template through automerged PRs",
+    "private": true,
     "allow_auto_merge": true,
     "allow_merge_commit": false,
     "allow_rebase_merge": false,
@@ -13,7 +13,7 @@
     "has_issues": true,
     "has_projects": false,
     "has_wiki": false,
-    "is_template": true
+    "is_template": false
   },
   "topics": {
     "names": [

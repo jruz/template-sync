@@ -1,6 +1,6 @@
 # Agent instructions
 
-`template-rust` is a minimal Rust CLI template using Clap.
+`template-sync` keeps repositories in sync with their template repository.
 
 ## Architecture
 

@@ -1,6 +1,6 @@
-# template-rust
+# template-sync
 
-A minimal Rust CLI template using Clap.
+Keep repositories in sync with their template through automerged pull requests.
 
 ## Development
 
@@ -8,11 +8,6 @@ A minimal Rust CLI template using Clap.
 - `just check`
 - `just test`
 - `just install`
-
-## Nix installation
-
-- `nix profile add github:jruz/template-rust` installs the latest release binary.
-- `nix profile add github:jruz/template-rust#source` builds from source.
 
 ## Licence
 
