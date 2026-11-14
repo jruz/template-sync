@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::libs::document::{cargo, format, github_settings, package};
+use crate::libs::document::{cargo, format, github_settings, package, woodpecker_settings};
 
 pub const MANIFEST_FILE: &str = "template.json";
 pub const PROJECT_FILE: &str = "template-sync.json";
@@ -58,6 +58,7 @@ pub enum Strategy {
     Package,
     Replace,
     Review,
+    WoodpeckerSettings,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -225,6 +226,7 @@ fn merge_strategy(path: &str) -> Result<Strategy, Error> {
         cargo::FILE => Ok(Strategy::Cargo),
         github_settings::FILE => Ok(Strategy::GithubSettings),
         package::FILE => Ok(Strategy::Package),
+        woodpecker_settings::FILE => Ok(Strategy::WoodpeckerSettings),
         _ if format::detect(path).is_none() => Ok(Strategy::Lines),
         _ => {
             let path = path.to_owned();

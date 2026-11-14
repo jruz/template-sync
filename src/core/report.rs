@@ -147,7 +147,8 @@ fn label(finding: &compare::Finding) -> &'static str {
             | manifest::Strategy::GithubSettings
             | manifest::Strategy::Lines
             | manifest::Strategy::Package
-            | manifest::Strategy::Replace,
+            | manifest::Strategy::Replace
+            | manifest::Strategy::WoodpeckerSettings,
             compare::Status::Changed,
         ) => "changed",
     }

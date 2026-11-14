@@ -8,3 +8,4 @@ pub mod package;
 pub mod text;
 pub mod toml;
 pub mod toml_value;
+pub mod woodpecker_settings;

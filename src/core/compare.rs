@@ -235,6 +235,7 @@ pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Findi
             manifest::Strategy::Cargo
                 | manifest::Strategy::GithubSettings
                 | manifest::Strategy::Package
+                | manifest::Strategy::WoodpeckerSettings
         ) {
             let path = entry.path.clone();
             let error = Error::MissingProject(path);
@@ -252,7 +253,8 @@ pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Findi
     match &entry.strategy {
         manifest::Strategy::Cargo
         | manifest::Strategy::GithubSettings
-        | manifest::Strategy::Package => data(entry, contents, current),
+        | manifest::Strategy::Package
+        | manifest::Strategy::WoodpeckerSettings => data(entry, contents, current),
         manifest::Strategy::Lines => line_merge(entry, contents, current),
         manifest::Strategy::Replace => text(entry, template, current),
         manifest::Strategy::Review => review(entry, contents, current),

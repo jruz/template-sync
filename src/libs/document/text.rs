@@ -1,4 +1,6 @@
-use crate::libs::document::{cargo, format, github_settings, keys, package, toml_value};
+use crate::libs::document::{
+    cargo, format, github_settings, keys, package, toml_value, woodpecker_settings,
+};
 
 type Value = serde_json::Value;
 
@@ -16,6 +18,8 @@ pub enum Error {
     TomlValue(#[from] toml_value::Error),
     #[error("unsupported data format: {0}")]
     Unsupported(String),
+    #[error(transparent)]
+    WoodpeckerSettings(#[from] woodpecker_settings::Error),
     #[error(transparent)]
     Yaml(#[from] serde_norway::Error),
 }
@@ -94,6 +98,15 @@ pub fn merge(path: &str, sources: &Sources<'_>) -> Result<Merged, Error> {
         return Ok(Merged {
             before: print_json(&project)?,
             after: print_json(&synced)?,
+        });
+    }
+    if path == woodpecker_settings::FILE {
+        let template = parse_yaml(sources.template)?;
+        let project = parse_yaml(sources.project)?;
+        let synced = woodpecker_settings::sync(&template, &project)?;
+        return Ok(Merged {
+            before: serde_norway::to_string(&project)?,
+            after: serde_norway::to_string(&synced)?,
         });
     }
     let owned = path.to_owned();

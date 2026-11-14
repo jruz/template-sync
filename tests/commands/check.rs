@@ -106,8 +106,8 @@ fn rejects_unsupported_structured_merge_files() {
 }
 
 #[test]
-fn refuses_to_copy_missing_cargo_or_package_identity() {
-    for path in ["Cargo.toml", "package.json"] {
+fn refuses_to_copy_missing_project_identity() {
+    for path in ["Cargo.toml", "package.json", "woodpecker-settings.yaml"] {
         let remotes = remotes();
         let origin = remotes.path();
         let project = project(&remotes);

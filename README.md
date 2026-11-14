@@ -10,6 +10,7 @@ Keep repositories in sync with their template through automerged pull requests.
 - `merge` is an array of paths using file-specific rules; unsupported structured files fail.
 - `Cargo.toml` syncs build dependencies, lints and profiles while preserving project package metadata and runtime dependencies.
 - `package.json` syncs shared scripts, dependency tables, private status, module type and engines while preserving project-only entries.
+- `woodpecker-settings.yaml` preserves only the project's `repo` field and copies everything else exactly from the template, including encrypted secrets.
 - Structured merges require existing project files to avoid copying template identity.
 - `github-settings.json` uses GitHub-specific rules.
 - GitHub sync requires an existing project file and preserves repository identity and topics.

@@ -132,6 +132,46 @@ fn syncs_cargo_tables_and_preserves_project_entries() {
 }
 
 #[test]
+fn syncs_all_woodpecker_settings_except_repo() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = r#"{"merge":["woodpecker-settings.yaml"],"replace":[],"review":[]}"#;
+    let policy = "repo:\n  name: jruz/template-rs\nsettings:\n  timeout: 60\n  trusted: false\nsecrets:\n  GITHUB_TOKEN:\n    data: encrypted-template\n    events: [tag]\n";
+    let current = "repo:\n  name: jruz/project\nsettings:\n  timeout: 10\n  trusted: true\n  custom: true\nsecrets:\n  GITHUB_TOKEN:\n    data: encrypted-project\n    events: [push]\n  CUSTOM:\n    data: encrypted-custom\ncustom: true\n";
+    write_all(root, &[("woodpecker-settings.yaml", current)]);
+    commit_changes(root);
+    write_all(
+        &template,
+        &[
+            ("template.json", manifest),
+            ("woodpecker-settings.yaml", policy),
+        ],
+    );
+    commit_changes(&template);
+    let preview = run(root, origin, &["update", "--dry-run"]);
+    assert!(preview.status.success(), "{}", stderr(&preview));
+    assert!(stdout(&preview).contains("MODIFIED (1)\n  woodpecker-settings.yaml\n"));
+    assert_eq!(read(root, "woodpecker-settings.yaml"), current);
+    let updated = run(root, origin, &["update"]);
+    assert!(updated.status.success(), "{}", stderr(&updated));
+    let actual = read(root, "woodpecker-settings.yaml");
+    let actual: serde_json::Value = serde_norway::from_str(&actual).expect("CI settings");
+    let timeout: u32 = 60;
+    let expected = serde_json::json!({
+        "repo": { "name": "jruz/project" },
+        "settings": { "timeout": timeout, "trusted": false },
+        "secrets": { "GITHUB_TOKEN": { "data": "encrypted-template", "events": ["tag"] } }
+    });
+    assert_eq!(actual, expected);
+    let checked = run(root, origin, &["check"]);
+    assert!(checked.status.success(), "{}", stderr(&checked));
+    assert_eq!(stdout(&checked), "in sync\n");
+}
+
+#[test]
 fn records_template_revision() {
     let remotes = remotes();
     let origin = remotes.path();

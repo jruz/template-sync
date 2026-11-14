@@ -49,7 +49,8 @@ fn write_file(project: &Path, template: &Path, finding: &compare::Finding) -> Re
         | manifest::Strategy::GithubSettings
         | manifest::Strategy::Lines
         | manifest::Strategy::Package
-        | manifest::Strategy::Review => std::fs::write(&target, &finding.content),
+        | manifest::Strategy::Review
+        | manifest::Strategy::WoodpeckerSettings => std::fs::write(&target, &finding.content),
     };
     written(&target, result)
 }
