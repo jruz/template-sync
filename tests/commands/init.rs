@@ -21,6 +21,27 @@ fn creates_project_file_for_detected_template() {
 }
 
 #[test]
+fn prefers_rust_when_both_markers_exist() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let rust_template = origin.join("template-rs.git");
+    let typescript_template = origin.join("template-ts.git");
+    std::fs::rename(typescript_template, &rust_template).expect("rename template");
+    let revision = crate::utils::fixtures::git(&rust_template, &["rev-parse", "HEAD"]);
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let root = directory.path();
+    crate::utils::fixtures::write_all(root, &[("Cargo.toml", ""), ("package.json", "{}")]);
+    let output = run(root, origin, &["init"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let created = read(root, "template-sync.json");
+    let expected = format!(
+        "{{\n  \"revision\": \"{}\",\n  \"template\": \"jruz/template-rs\"\n}}\n",
+        revision.trim()
+    );
+    assert_eq!(created, expected);
+}
+
+#[test]
 fn refuses_initialized_projects() {
     let remotes = remotes();
     let origin = remotes.path();

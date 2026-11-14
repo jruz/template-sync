@@ -61,6 +61,12 @@ To manage a synced file manually, add its path to the project's `review` array i
 - Automatic sync drift fails `check`.
 - `pull` preserves review files when the template deletes them.
 
+## Missing GitHub settings
+
+- Run `github-settings pull` to create a missing `github-settings.json` from the repository's live settings.
+- Commit `github-settings.json` before running `template-sync pull`.
+- Run `template-sync pull` to merge the template's shared policy while preserving repository identity.
+
 ## New projects
 
 | Language   | Repository                                              |
@@ -81,3 +87,6 @@ gh repo create jruz/PROJECT --template jruz/template-ts --private --clone
 ```
 
 Enter the cloned project directory and run `template-sync init` to create `template-sync.json`.
+
+- `Cargo.toml` selects `jruz/template-rs`.
+- `package.json` selects `jruz/template-ts` when no `Cargo.toml` exists.

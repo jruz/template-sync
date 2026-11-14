@@ -7,8 +7,6 @@ const MARKERS: [(&str, &str); 2] = [
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("cannot pick a template, found {}", .0.join(" and "))]
-    Ambiguous(Vec<&'static str>),
     #[error("cannot pick a template, expected one of {}", markers().join(", "))]
     Unknown,
 }
@@ -18,19 +16,11 @@ fn markers() -> Vec<&'static str> {
 }
 
 pub fn template(directory: &Path) -> Result<&'static str, Error> {
-    let found = MARKERS
+    MARKERS
         .iter()
-        .filter(|(marker, _)| directory.join(marker).is_file())
-        .collect::<Vec<_>>();
-    match found.as_slice() {
-        [] => Err(Error::Unknown),
-        [(_, repository)] => Ok(repository),
-        many => {
-            let names = many.iter().map(|(marker, _)| *marker).collect();
-            let error = Error::Ambiguous(names);
-            Err(error)
-        }
-    }
+        .find(|(marker, _)| directory.join(marker).is_file())
+        .map(|(_, repository)| *repository)
+        .ok_or(Error::Unknown)
 }
 
 #[cfg(test)]
@@ -66,12 +56,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_projects_with_several_markers() {
+    fn prefers_rust_for_projects_with_several_markers() {
         let project = directory(&["Cargo.toml", "package.json"]);
         let root = project.path();
-        let result = template(root);
-        assert!(
-            matches!(result, Err(Error::Ambiguous(names)) if names == ["Cargo.toml", "package.json"])
-        );
+        let picked = template(root).expect("template");
+        assert_eq!(picked, "jruz/template-rs");
     }
 }
