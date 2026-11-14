@@ -143,7 +143,10 @@ fn label(finding: &compare::Finding) -> &'static str {
         (_, compare::Status::Removed) => "removed",
         (_, compare::Status::Missing) => "missing",
         (
-            manifest::Strategy::Lines | manifest::Strategy::Merge(_) | manifest::Strategy::Replace,
+            manifest::Strategy::GithubSettings
+            | manifest::Strategy::Lines
+            | manifest::Strategy::Merge(_)
+            | manifest::Strategy::Replace,
             compare::Status::Changed,
         ) => "changed",
     }

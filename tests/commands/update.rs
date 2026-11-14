@@ -24,6 +24,76 @@ fn writes_project_and_keeps_review_files() {
 }
 
 #[test]
+fn syncs_github_policy_and_preserves_repository_settings() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = serde_json::json!({
+        "merge": [{ "path": "github-settings.json" }],
+        "replace": [],
+        "review": []
+    });
+    let policy = serde_json::json!({
+        "repository": "jruz/template-rs",
+        "settings": {
+            "description": "template", "private": false, "is_template": true,
+            "allow_auto_merge": true, "allow_merge_commit": false,
+            "delete_branch_on_merge": true, "default_branch": "main"
+        },
+        "topics": { "names": ["rust"] },
+        "branch_protection": {
+            "enforce_admins": false,
+            "required_status_checks": { "strict": true, "contexts": ["ci/woodpecker/pr/check"] }
+        },
+        "actions": { "enabled": false },
+        "security": { "vulnerability-alerts": true },
+        "labels": [{ "name": "bugs", "color": "d73a4a" }]
+    });
+    let current = serde_json::json!({
+        "repository": "jruz/project",
+        "settings": {
+            "description": "project", "private": true, "is_template": false,
+            "allow_auto_merge": false, "allow_merge_commit": true,
+            "delete_branch_on_merge": false, "default_branch": "develop"
+        },
+        "topics": { "names": ["project"] },
+        "branch_protection": { "enforce_admins": true },
+        "actions": { "enabled": true },
+        "security": { "vulnerability-alerts": false },
+        "labels": [{ "name": "custom", "color": "ffffff" }]
+    });
+    write_all(root, &[("github-settings.json", &current.to_string())]);
+    commit_changes(root);
+    write_all(
+        &template,
+        &[
+            ("template.json", &manifest.to_string()),
+            ("github-settings.json", &policy.to_string()),
+        ],
+    );
+    commit_changes(&template);
+    let updated = run(root, origin, &["update"]);
+    assert!(updated.status.success(), "{}", stderr(&updated));
+    let text = read(root, "github-settings.json");
+    let actual: serde_json::Value = serde_json::from_str(&text).expect("GitHub settings");
+    let mut expected = current;
+    *expected.get_mut("settings").expect("project settings") = serde_json::json!({
+        "description": "project", "private": true, "is_template": false,
+        "allow_auto_merge": true, "allow_merge_commit": false,
+        "delete_branch_on_merge": true, "default_branch": "main"
+    });
+    for key in ["branch_protection", "actions", "security", "labels"] {
+        *expected.get_mut(key).expect("project policy key") =
+            policy.get(key).expect("template policy key").clone();
+    }
+    assert_eq!(actual, expected);
+    let checked = run(root, origin, &["check"]);
+    assert!(checked.status.success(), "{}", stderr(&checked));
+}
+
+#[test]
 fn records_template_revision() {
     let remotes = remotes();
     let origin = remotes.path();

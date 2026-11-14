@@ -1,4 +1,5 @@
 pub mod format;
+pub mod github_settings;
 pub mod keys;
 pub mod lines;
 pub mod merge;

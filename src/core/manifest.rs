@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::libs::document::format;
+use crate::libs::document::{format, github_settings};
 
 pub const MANIFEST_FILE: &str = "template.json";
 pub const PROJECT_FILE: &str = "template-sync.json";
@@ -11,6 +11,8 @@ pub const PROJECT_FILE: &str = "template-sync.json";
 pub enum Error {
     #[error("project already initialized")]
     AlreadyInitialized,
+    #[error("{MANIFEST_FILE} merges {0} using file-specific rules, without keys")]
+    FileSpecificKeys(String),
     #[error("invalid {0}")]
     Invalid(String, #[source] serde_json::Error),
     #[error("invalid template repository: {0}")]
@@ -61,6 +63,7 @@ pub struct Project {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Strategy {
+    GithubSettings,
     Lines,
     Merge(Vec<String>),
     Replace,
@@ -228,6 +231,14 @@ fn expand_all(template: &Path, paths: &[String], strategy: &Strategy) -> Result<
 }
 
 fn merge_strategy(merge: &Merge) -> Result<Strategy, Error> {
+    if merge.path == github_settings::FILE {
+        if merge.keys.is_some() {
+            let path = merge.path.clone();
+            let error = Error::FileSpecificKeys(path);
+            return Err(error);
+        }
+        return Ok(Strategy::GithubSettings);
+    }
     let structured = format::detect(&merge.path).is_some();
     match (structured, &merge.keys) {
         (true, Some(keys)) => {

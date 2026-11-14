@@ -1,4 +1,4 @@
-use crate::libs::document::{format, keys, merge, toml, toml_value};
+use crate::libs::document::{format, github_settings, keys, merge, toml, toml_value};
 
 const JSON: Codec = Codec {
     parse: parse_json,
@@ -14,6 +14,8 @@ type Value = serde_json::Value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    GithubSettings(#[from] github_settings::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
@@ -104,6 +106,15 @@ pub fn changes(
 }
 
 pub fn merge(path: &str, sources: &Sources<'_>, keys: &[String]) -> Result<Merged, Error> {
+    if path == github_settings::FILE {
+        let template = parse_json(sources.template)?;
+        let project = parse_json(sources.project)?;
+        let synced = github_settings::sync(&template, &project)?;
+        return Ok(Merged {
+            before: print_json(&project)?,
+            after: print_json(&synced)?,
+        });
+    }
     let Some(kind) = format::detect(path) else {
         let owned = path.to_owned();
         let error = Error::Unsupported(owned);

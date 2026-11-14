@@ -7,6 +7,8 @@ pub enum Error {
     Lines(String, #[source] lines::Error),
     #[error("cannot merge {0}")]
     Merge(String, #[source] text::Error),
+    #[error("missing project {0}; create it with this repository's identity before syncing")]
+    MissingGithubSettings(String),
     #[error("cannot parse {0}")]
     Parse(String, #[source] text::Error),
 }
@@ -238,6 +240,11 @@ pub fn removal(entry: &manifest::Entry, project: &str) -> Finding {
 pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Finding, Error> {
     let template = contents.template;
     let Some(current) = contents.project else {
+        if entry.strategy == manifest::Strategy::GithubSettings {
+            let path = entry.path.clone();
+            let error = Error::MissingGithubSettings(path);
+            return Err(error);
+        }
         return Ok(Finding {
             content: template.to_owned(),
             detail: Detail::Text,
@@ -248,6 +255,7 @@ pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Findi
         });
     };
     match &entry.strategy {
+        manifest::Strategy::GithubSettings => data(entry, &[], contents, current),
         manifest::Strategy::Lines => line_merge(entry, contents, current),
         manifest::Strategy::Merge(keys) => data(entry, keys, contents, current),
         manifest::Strategy::Replace => text(entry, template, current),

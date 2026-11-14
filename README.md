@@ -8,6 +8,10 @@ Keep repositories in sync with their template through automerged pull requests.
 - A project opts in with `template-sync.json` naming its template and the template `revision` it last synced.
 - `replace` files must match the template exactly, `update` overwrites them.
 - `merge` JSON, YAML, and TOML files take the listed top-level `keys` from the template and keep project-only entries.
+- `merge` entries for `github-settings.json` take no `keys` and use GitHub-specific rules.
+- GitHub sync requires an existing project file and preserves repository identity and topics.
+- GitHub sync preserves `settings.description`, `settings.private` and `settings.is_template`.
+- GitHub sync applies other template settings and replaces branch protection, Actions, security and labels exactly.
 - `merge` line files such as `.gitignore` take no `keys`, they take every line above the marker from the template and keep the project lines below it.
 - The marker is `# project entries below, everything above is managed by template-sync`.
 - `merge` drops entries the template removed since `revision`.

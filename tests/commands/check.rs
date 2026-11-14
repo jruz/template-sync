@@ -37,6 +37,57 @@ fn reviews_template_changes_since_revision() {
 }
 
 #[test]
+fn rejects_generic_keys_for_github_settings() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = serde_json::json!({
+        "merge": [{ "path": "github-settings.json", "keys": ["labels"] }],
+        "replace": [],
+        "review": []
+    });
+    write_all(
+        &template,
+        &[
+            ("template.json", &manifest.to_string()),
+            ("github-settings.json", "{}"),
+        ],
+    );
+    commit_changes(&template);
+    let output = run(root, origin, &["check"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("using file-specific rules, without keys"));
+}
+
+#[test]
+fn refuses_to_copy_template_github_identity_into_missing_project_settings() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = serde_json::json!({
+        "merge": [{ "path": "github-settings.json" }],
+        "replace": [],
+        "review": []
+    });
+    write_all(
+        &template,
+        &[
+            ("template.json", &manifest.to_string()),
+            ("github-settings.json", "{}"),
+        ],
+    );
+    commit_changes(&template);
+    let output = run(root, origin, &["check"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("missing project github-settings.json"));
+    assert!(!root.join("github-settings.json").exists());
+}
+
+#[test]
 fn reports_missing_project_file() {
     let remotes = remotes();
     let origin = remotes.path();
