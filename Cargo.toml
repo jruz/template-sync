@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "=4.6.7", features = ["derive"] }
+diffy = "=0.5.2"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["preserve_order"] }
 serde_norway = "=0.9.42"
@@ -12,6 +13,8 @@ similar = "=3.2.1"
 tempfile = "=3.27.0"
 thiserror = "=2.0.21"
 toml_edit = "=0.25.19"
+tree-sitter = "=0.25.10"
+tree-sitter-just = "=0.2.0"
 
 [build-dependencies]
 thiserror = "=2.0.21"

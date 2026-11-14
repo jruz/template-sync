@@ -47,6 +47,7 @@ fn write_file(project: &Path, template: &Path, finding: &compare::Finding) -> Re
         }
         manifest::Strategy::Cargo
         | manifest::Strategy::GithubSettings
+        | manifest::Strategy::Justfile
         | manifest::Strategy::Lines
         | manifest::Strategy::Package
         | manifest::Strategy::Review

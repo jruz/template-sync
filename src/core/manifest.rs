@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::libs::document::{cargo, format, github_settings, package, woodpecker_settings};
+use crate::libs::document::{
+    cargo, format, github_settings, justfile, package, woodpecker_settings,
+};
 
 pub const MANIFEST_FILE: &str = "template.json";
 pub const PROJECT_FILE: &str = "template-sync.json";
@@ -54,6 +56,7 @@ pub struct Project {
 pub enum Strategy {
     Cargo,
     GithubSettings,
+    Justfile,
     Lines,
     Package,
     Replace,
@@ -225,6 +228,7 @@ fn merge_strategy(path: &str) -> Result<Strategy, Error> {
     match path {
         cargo::FILE => Ok(Strategy::Cargo),
         github_settings::FILE => Ok(Strategy::GithubSettings),
+        justfile::merge::FILE => Ok(Strategy::Justfile),
         package::FILE => Ok(Strategy::Package),
         woodpecker_settings::FILE => Ok(Strategy::WoodpeckerSettings),
         _ if format::detect(path).is_none() => Ok(Strategy::Lines),

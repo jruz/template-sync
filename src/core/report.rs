@@ -145,6 +145,7 @@ fn label(finding: &compare::Finding) -> &'static str {
         (
             manifest::Strategy::Cargo
             | manifest::Strategy::GithubSettings
+            | manifest::Strategy::Justfile
             | manifest::Strategy::Lines
             | manifest::Strategy::Package
             | manifest::Strategy::Replace

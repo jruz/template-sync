@@ -1,5 +1,5 @@
 use crate::libs::document::{
-    cargo, format, github_settings, keys, package, toml_value, woodpecker_settings,
+    cargo, format, github_settings, justfile, keys, package, toml_value, woodpecker_settings,
 };
 
 type Value = serde_json::Value;
@@ -12,6 +12,8 @@ pub enum Error {
     GithubSettings(#[from] github_settings::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Justfile(#[from] justfile::merge::Error),
     #[error(transparent)]
     Package(#[from] package::Error),
     #[error(transparent)]
@@ -73,6 +75,13 @@ pub fn changes(
 }
 
 pub fn merge(path: &str, sources: &Sources<'_>) -> Result<Merged, Error> {
+    if path == justfile::merge::FILE {
+        let after = justfile::merge::sync(sources.template, sources.base, sources.project)?;
+        return Ok(Merged {
+            before: sources.project.to_owned(),
+            after,
+        });
+    }
     if path == cargo::FILE {
         let after = cargo::sync(sources.template, sources.base, sources.project)?;
         return Ok(Merged {

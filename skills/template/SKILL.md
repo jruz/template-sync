@@ -15,6 +15,16 @@ The template's `template.json` assigns synced paths to these modes:
 | `merge`   | `pull` combines template settings with project settings using file-specific rules. |
 | `review`  | You apply relevant template changes manually. `pull` leaves the file untouched.    |
 
+## Justfile merging
+
+- Root `justfile` merge entries use a parser-backed three-way merge.
+- Independent template edits merge with project-specific recipe steps.
+- Project-only recipes and declarations remain intact.
+- Existing project item order is preserved.
+- New template items are appended.
+- Conflicting edits stop the pull before files or the revision change.
+- Resolve the reported item against the template before retrying.
+
 ## Project overrides
 
 To manage a synced file manually, add its path to the project's `review` array in `template-sync.json`:

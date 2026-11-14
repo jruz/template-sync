@@ -253,6 +253,7 @@ pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Findi
     match &entry.strategy {
         manifest::Strategy::Cargo
         | manifest::Strategy::GithubSettings
+        | manifest::Strategy::Justfile
         | manifest::Strategy::Package
         | manifest::Strategy::WoodpeckerSettings => data(entry, contents, current),
         manifest::Strategy::Lines => line_merge(entry, contents, current),
