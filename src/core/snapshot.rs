@@ -13,6 +13,12 @@ pub enum Error {
     Read(PathBuf, #[source] std::io::Error),
 }
 
+#[derive(Clone, Copy)]
+pub enum Review {
+    Project,
+    Upstream,
+}
+
 pub struct Roots<'path> {
     pub base: &'path Path,
     pub project: &'path Path,
@@ -58,10 +64,17 @@ fn read_in(root: &Path, path: &str) -> Result<Option<String>, Error> {
     read_optional(&target)
 }
 
-fn entry_finding(roots: &Roots<'_>, entry: &manifest::Entry) -> Result<compare::Finding, Error> {
+fn entry_finding(
+    roots: &Roots<'_>,
+    entry: &manifest::Entry,
+    review: Review,
+) -> Result<compare::Finding, Error> {
     let template_path = roots.template.join(&entry.path);
     let template = read(&template_path)?;
-    let base = read_in(roots.base, &entry.path)?;
+    let base = match (&entry.strategy, review) {
+        (manifest::Strategy::Review, Review::Project) => None,
+        _ => read_in(roots.base, &entry.path)?,
+    };
     let project = read_in(roots.project, &entry.path)?;
     let contents = compare::Contents {
         base: base.as_deref(),
@@ -92,11 +105,12 @@ fn removals(roots: &Roots<'_>, config: &manifest::Project) -> Result<Vec<compare
 pub fn findings(
     roots: &Roots<'_>,
     config: &manifest::Project,
+    review: Review,
 ) -> Result<Vec<compare::Finding>, Error> {
     let template_manifest = manifest::load(roots.template)?;
     let current = manifest::entries(&template_manifest, roots.template, config)?
         .iter()
-        .map(|entry| entry_finding(roots, entry))
+        .map(|entry| entry_finding(roots, entry, review))
         .collect::<Result<Vec<_>, _>>()?;
     let gone = removals(roots, config)?;
     let all = current.into_iter().chain(gone).collect();

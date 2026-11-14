@@ -13,8 +13,9 @@ Authenticate `gh` before syncing.
 ```sh
 template-sync init
 template-sync check
-template-sync update --dry-run
-template-sync update
+template-sync check --review
+template-sync pull --dry-run
+template-sync pull
 ```
 
 See the [template skill](skills/template/SKILL.md) for sync rules and the full workflow.

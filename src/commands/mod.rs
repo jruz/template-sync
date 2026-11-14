@@ -1,5 +1,5 @@
 pub mod check;
 pub mod init;
-pub mod update;
+pub mod pull;
 pub mod update_repositories;
 pub mod version;

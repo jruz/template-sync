@@ -7,7 +7,7 @@ use std::io::IsTerminal as _;
 use std::process::ExitCode;
 
 use clap::Parser as _;
-use commands::{check, init, update, update_repositories, version};
+use commands::{check, init, pull, update_repositories, version};
 use utils::error;
 use utils::output::Output;
 use utils::style::Style;
@@ -15,11 +15,14 @@ use utils::style::Style;
 #[derive(Debug, clap::Subcommand)]
 enum Command {
     #[command(about = "Compare the project with its template")]
-    Check,
+    Check {
+        #[arg(long, help = "Compare local review files with the current template")]
+        review: bool,
+    },
     #[command(about = "Make the project follow the template that matches its files")]
     Init,
-    #[command(about = "Update the project with its template files")]
-    Update {
+    #[command(about = "Pull template changes into the project")]
+    Pull {
         #[arg(long, help = "List the files that would change without writing them")]
         dry_run: bool,
     },
@@ -51,16 +54,16 @@ enum Error {
     #[error(transparent)]
     Init(#[from] init::Error),
     #[error(transparent)]
-    Update(#[from] update::Error),
+    Pull(#[from] pull::Error),
     #[error(transparent)]
     UpdateRepositories(#[from] update_repositories::Error),
 }
 
 fn run(command: Command, style: Style) -> Result<Output, Error> {
     let output = match command {
-        Command::Check => check::run(style)?,
+        Command::Check { review } => check::run(review, style)?,
         Command::Init => init::run()?,
-        Command::Update { dry_run } => update::run(dry_run, style)?,
+        Command::Pull { dry_run } => pull::run(dry_run, style)?,
         Command::UpdateRepositories { dry_run, account } => {
             update_repositories::run(&account, dry_run, style)?
         }

@@ -10,7 +10,7 @@ fn writes_project_and_keeps_review_files() {
     let origin = remotes.path();
     let project = project(&remotes);
     let root = project.path();
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert_eq!(read(root, "LICENSE"), "licence\n");
     assert_eq!(read(root, "scripts/lib/log.ts"), "export {};\n");
@@ -74,7 +74,7 @@ fn syncs_github_policy_and_preserves_repository_settings() {
         ],
     );
     commit_changes(&template);
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     let text = read(root, "github-settings.json");
     let actual: serde_json::Value = serde_json::from_str(&text).expect("GitHub settings");
@@ -110,14 +110,14 @@ fn syncs_cargo_tables_and_preserves_project_entries() {
         &[("template.json", manifest), ("Cargo.toml", policy)],
     );
     commit_changes(&template);
-    let preview = run(root, origin, &["update", "--dry-run"]);
+    let preview = run(root, origin, &["pull", "--dry-run"]);
     assert!(preview.status.success(), "{}", stderr(&preview));
     assert!(stdout(&preview).contains("MODIFIED (1)\n  Cargo.toml\n"));
     assert_eq!(read(root, "Cargo.toml"), current);
     let drift = run(root, origin, &["check"]);
     assert!(!drift.status.success());
     assert!(stdout(&drift).contains("Cargo.toml#profile"));
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     let actual = read(root, "Cargo.toml");
     assert!(actual.contains("name = \"project\""));
@@ -151,11 +151,11 @@ fn syncs_all_woodpecker_settings_except_repo() {
         ],
     );
     commit_changes(&template);
-    let preview = run(root, origin, &["update", "--dry-run"]);
+    let preview = run(root, origin, &["pull", "--dry-run"]);
     assert!(preview.status.success(), "{}", stderr(&preview));
     assert!(stdout(&preview).contains("MODIFIED (1)\n  woodpecker-settings.yaml\n"));
     assert_eq!(read(root, "woodpecker-settings.yaml"), current);
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     let actual = read(root, "woodpecker-settings.yaml");
     let actual: serde_json::Value = serde_norway::from_str(&actual).expect("CI settings");
@@ -181,7 +181,7 @@ fn records_template_revision() {
     write_all(&template, &[("README.md", "template\n")]);
     commit_changes(&template);
     let revision = template_revision(&remotes);
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert!(read(root, "template-sync.json").contains(&revision));
 }
@@ -198,9 +198,9 @@ fn deletes_files_the_template_removed_since_revision() {
     git(&template, &["rm", "--quiet", "scripts/lib/log.ts"]);
     write_all(&template, &[("scripts/lib/run.ts", "export {};\n")]);
     commit_changes(&template);
-    let previewed = run(root, origin, &["update", "--dry-run"]);
+    let previewed = run(root, origin, &["pull", "--dry-run"]);
     assert!(stdout(&previewed).contains("DELETED (1)\n  scripts/lib/log.ts\n"));
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert!(!root.join("scripts/lib/log.ts").exists());
     assert_eq!(read(root, "scripts/lib/run.ts"), "export {};\n");
@@ -212,7 +212,7 @@ fn dry_run_lists_files_without_writing() {
     let origin = remotes.path();
     let project = project(&remotes);
     let root = project.path();
-    let output = run(root, origin, &["update", "--dry-run"]);
+    let output = run(root, origin, &["pull", "--dry-run"]);
     assert!(output.status.success(), "{}", stderr(&output));
     assert_eq!(
         stdout(&output),
@@ -230,7 +230,7 @@ fn keeps_files_the_project_reviews() {
     let revision = template_revision(&remotes);
     let reviewing = project_file(&revision, "\"LICENSE\"");
     write_all(root, &[("template-sync.json", &reviewing)]);
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert_eq!(read(root, "LICENSE"), "old licence\n");
 }
@@ -242,7 +242,7 @@ fn refuses_uncommitted_targets() {
     let project = project(&remotes);
     let root = project.path();
     write_all(root, &[("LICENSE", "edited\n")]);
-    let updated = run(root, origin, &["update"]);
+    let updated = run(root, origin, &["pull"]);
     assert!(!updated.status.success());
     assert!(stderr(&updated).contains("uncommitted changes in template targets"));
     assert_eq!(read(root, "LICENSE"), "edited\n");

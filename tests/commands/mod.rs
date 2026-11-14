@@ -1,6 +1,6 @@
 mod check;
 mod help;
 mod init;
-mod update;
+mod pull;
 mod update_repositories;
 mod version;

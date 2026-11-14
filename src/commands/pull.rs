@@ -31,7 +31,7 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
         project: &project,
         template: template.path(),
     };
-    let findings = snapshot::findings(&roots, &config)?;
+    let findings = snapshot::findings(&roots, &config, snapshot::Review::Upstream)?;
     if dry_run {
         return Ok(Output {
             success: true,

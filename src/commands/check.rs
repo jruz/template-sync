@@ -17,7 +17,7 @@ pub enum Error {
     Source(#[from] source::Error),
 }
 
-pub fn run(style: Style) -> Result<Output, Error> {
+pub fn run(review: bool, style: Style) -> Result<Output, Error> {
     let project = std::env::current_dir()?;
     let config = manifest::project(&project)?;
     let template = source::clone(&config.template)?;
@@ -27,7 +27,12 @@ pub fn run(style: Style) -> Result<Output, Error> {
         project: &project,
         template: template.path(),
     };
-    let findings = snapshot::findings(&roots, &config)?;
+    let comparison = if review {
+        snapshot::Review::Project
+    } else {
+        snapshot::Review::Upstream
+    };
+    let findings = snapshot::findings(&roots, &config, comparison)?;
     Ok(Output {
         success: !report::failed(&findings),
         text: report::render(&findings, style),

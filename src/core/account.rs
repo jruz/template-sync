@@ -103,7 +103,7 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
         project: project_path,
         template: template_path,
     };
-    let findings = snapshot::findings(&roots, &project_config)?;
+    let findings = snapshot::findings(&roots, &project_config, snapshot::Review::Upstream)?;
     if !report::failed(&findings) {
         return Ok(Outcome::InSync);
     }
