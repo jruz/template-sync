@@ -31,7 +31,7 @@ fn syncs_github_policy_and_preserves_repository_settings() {
     let root = project.path();
     let template = template_directory(&remotes);
     let manifest = serde_json::json!({
-        "merge": [{ "path": "github-settings.json" }],
+        "merge": ["github-settings.json"],
         "replace": [],
         "review": []
     });
@@ -91,6 +91,44 @@ fn syncs_github_policy_and_preserves_repository_settings() {
     assert_eq!(actual, expected);
     let checked = run(root, origin, &["check"]);
     assert!(checked.status.success(), "{}", stderr(&checked));
+}
+
+#[test]
+fn syncs_cargo_tables_and_preserves_project_entries() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = r#"{"merge":["Cargo.toml"],"replace":[],"review":[]}"#;
+    let policy = "[package]\nname = \"template\"\n[dependencies]\nclap = \"=2.0.0\"\n[build-dependencies]\nthiserror = \"=2.0.0\"\n[lints.clippy]\nshared = \"deny\"\n[profile.release]\nlto = true\n";
+    let current = "[package]\nname = \"project\"\n[dependencies]\nclap = \"=1.0.0\"\n[lints.clippy]\ncustom = \"allow\"\n";
+    write_all(root, &[("Cargo.toml", current)]);
+    commit_changes(root);
+    write_all(
+        &template,
+        &[("template.json", manifest), ("Cargo.toml", policy)],
+    );
+    commit_changes(&template);
+    let preview = run(root, origin, &["update", "--dry-run"]);
+    assert!(preview.status.success(), "{}", stderr(&preview));
+    assert!(stdout(&preview).contains("MODIFIED (1)\n  Cargo.toml\n"));
+    assert_eq!(read(root, "Cargo.toml"), current);
+    let drift = run(root, origin, &["check"]);
+    assert!(!drift.status.success());
+    assert!(stdout(&drift).contains("Cargo.toml#profile"));
+    let updated = run(root, origin, &["update"]);
+    assert!(updated.status.success(), "{}", stderr(&updated));
+    let actual = read(root, "Cargo.toml");
+    assert!(actual.contains("name = \"project\""));
+    assert!(actual.contains("clap = \"=1.0.0\""));
+    assert!(actual.contains("thiserror = \"=2.0.0\""));
+    assert!(actual.contains("custom = \"allow\""));
+    assert!(actual.contains("shared = \"deny\""));
+    assert!(actual.contains("lto = true"));
+    let checked = run(root, origin, &["check"]);
+    assert!(checked.status.success(), "{}", stderr(&checked));
+    assert_eq!(stdout(&checked), "in sync\n");
 }
 
 #[test]

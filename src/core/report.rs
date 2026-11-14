@@ -143,9 +143,10 @@ fn label(finding: &compare::Finding) -> &'static str {
         (_, compare::Status::Removed) => "removed",
         (_, compare::Status::Missing) => "missing",
         (
-            manifest::Strategy::GithubSettings
+            manifest::Strategy::Cargo
+            | manifest::Strategy::GithubSettings
             | manifest::Strategy::Lines
-            | manifest::Strategy::Merge(_)
+            | manifest::Strategy::Package
             | manifest::Strategy::Replace,
             compare::Status::Changed,
         ) => "changed",
@@ -341,8 +342,7 @@ mod tests {
                 path: "lints.clippy.a".to_owned(),
             },
         ];
-        let keys = Vec::new();
-        let strategy = manifest::Strategy::Merge(keys);
+        let strategy = manifest::Strategy::Cargo;
         let base = finding("Cargo.toml", compare::Status::Changed, strategy);
         let detail = compare::Detail::Keys(changes);
         let merged = with_detail(base, detail);

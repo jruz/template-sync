@@ -37,7 +37,7 @@ fn reviews_template_changes_since_revision() {
 }
 
 #[test]
-fn rejects_generic_keys_for_github_settings() {
+fn rejects_object_merge_entries() {
     let remotes = remotes();
     let origin = remotes.path();
     let project = project(&remotes);
@@ -58,7 +58,7 @@ fn rejects_generic_keys_for_github_settings() {
     commit_changes(&template);
     let output = run(root, origin, &["check"]);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("using file-specific rules, without keys"));
+    assert!(stderr(&output).contains("invalid template.json"));
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn refuses_to_copy_template_github_identity_into_missing_project_settings() {
     let root = project.path();
     let template = template_directory(&remotes);
     let manifest = serde_json::json!({
-        "merge": [{ "path": "github-settings.json" }],
+        "merge": ["github-settings.json"],
         "replace": [],
         "review": []
     });
@@ -85,6 +85,59 @@ fn refuses_to_copy_template_github_identity_into_missing_project_settings() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("missing project github-settings.json"));
     assert!(!root.join("github-settings.json").exists());
+}
+
+#[test]
+fn rejects_unsupported_structured_merge_files() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = r#"{"merge":["settings.json"],"replace":[],"review":[]}"#;
+    write_all(
+        &template,
+        &[("template.json", manifest), ("settings.json", "{}")],
+    );
+    commit_changes(&template);
+    let output = run(root, origin, &["check"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("unsupported merge file: settings.json"));
+}
+
+#[test]
+fn refuses_to_copy_missing_cargo_or_package_identity() {
+    for path in ["Cargo.toml", "package.json"] {
+        let remotes = remotes();
+        let origin = remotes.path();
+        let project = project(&remotes);
+        let root = project.path();
+        let template = template_directory(&remotes);
+        let manifest = serde_json::json!({ "merge": [path], "replace": [], "review": [] });
+        let target = root.join(path);
+        if target.exists() {
+            std::fs::remove_file(target).expect("remove package");
+            commit_changes(root);
+        }
+        write_all(
+            &template,
+            &[
+                ("template.json", &manifest.to_string()),
+                (path, "template identity"),
+            ],
+        );
+        commit_changes(&template);
+        for arguments in [
+            &["check"][..],
+            &["update"][..],
+            &["update", "--dry-run"][..],
+        ] {
+            let output = run(root, origin, arguments);
+            assert!(!output.status.success());
+            assert!(stderr(&output).contains(&format!("missing project {path}")));
+            assert!(!root.join(path).exists());
+        }
+    }
 }
 
 #[test]

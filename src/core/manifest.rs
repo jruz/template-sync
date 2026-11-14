@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::libs::document::{format, github_settings};
+use crate::libs::document::{cargo, format, github_settings, package};
 
 pub const MANIFEST_FILE: &str = "template.json";
 pub const PROJECT_FILE: &str = "template-sync.json";
@@ -11,18 +11,12 @@ pub const PROJECT_FILE: &str = "template-sync.json";
 pub enum Error {
     #[error("project already initialized")]
     AlreadyInitialized,
-    #[error("{MANIFEST_FILE} merges {0} using file-specific rules, without keys")]
-    FileSpecificKeys(String),
     #[error("invalid {0}")]
     Invalid(String, #[source] serde_json::Error),
     #[error("invalid template repository: {0}")]
     InvalidTemplate(String),
-    #[error("{MANIFEST_FILE} merges {0} by keys, but it is a line file")]
-    KeysOnLines(String),
     #[error("missing template file: {0}")]
     MissingFile(String),
-    #[error("{MANIFEST_FILE} merges {0} without keys")]
-    MissingKeys(String),
     #[error("non UTF-8 file name: {0:?}")]
     NonUtf8Name(OsString),
     #[error("project not initialized, run template-sync init")]
@@ -33,21 +27,16 @@ pub enum Error {
     Serialize(#[source] serde_json::Error),
     #[error("{PROJECT_FILE} reviews {0}, which {MANIFEST_FILE} does not sync")]
     UnknownReview(String),
+    #[error("unsupported merge file: {0}")]
+    UnsupportedMerge(String),
     #[error("cannot write {0}")]
     Write(PathBuf, #[source] std::io::Error),
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Merge {
-    pub keys: Option<Vec<String>>,
-    pub path: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Manifest {
-    pub merge: Vec<Merge>,
+    pub merge: Vec<String>,
     pub replace: Vec<String>,
     pub review: Vec<String>,
 }
@@ -63,9 +52,10 @@ pub struct Project {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Strategy {
+    Cargo,
     GithubSettings,
     Lines,
-    Merge(Vec<String>),
+    Package,
     Replace,
     Review,
 }
@@ -230,41 +220,25 @@ fn expand_all(template: &Path, paths: &[String], strategy: &Strategy) -> Result<
     Ok(entries)
 }
 
-fn merge_strategy(merge: &Merge) -> Result<Strategy, Error> {
-    if merge.path == github_settings::FILE {
-        if merge.keys.is_some() {
-            let path = merge.path.clone();
-            let error = Error::FileSpecificKeys(path);
-            return Err(error);
-        }
-        return Ok(Strategy::GithubSettings);
-    }
-    let structured = format::detect(&merge.path).is_some();
-    match (structured, &merge.keys) {
-        (true, Some(keys)) => {
-            let listed = keys.clone();
-            let strategy = Strategy::Merge(listed);
-            Ok(strategy)
-        }
-        (false, None) => Ok(Strategy::Lines),
-        (true, None) => {
-            let owned = merge.path.clone();
-            let error = Error::MissingKeys(owned);
-            Err(error)
-        }
-        (false, Some(_)) => {
-            let owned = merge.path.clone();
-            let error = Error::KeysOnLines(owned);
+fn merge_strategy(path: &str) -> Result<Strategy, Error> {
+    match path {
+        cargo::FILE => Ok(Strategy::Cargo),
+        github_settings::FILE => Ok(Strategy::GithubSettings),
+        package::FILE => Ok(Strategy::Package),
+        _ if format::detect(path).is_none() => Ok(Strategy::Lines),
+        _ => {
+            let path = path.to_owned();
+            let error = Error::UnsupportedMerge(path);
             Err(error)
         }
     }
 }
 
-fn merge_entry(template: &Path, merge: &Merge) -> Result<Entry, Error> {
-    expand(template, &merge.path)?;
-    let strategy = merge_strategy(merge)?;
+fn merge_entry(template: &Path, path: &str) -> Result<Entry, Error> {
+    expand(template, path)?;
+    let strategy = merge_strategy(path)?;
     Ok(Entry {
-        path: merge.path.clone(),
+        path: path.to_owned(),
         strategy,
     })
 }
@@ -371,22 +345,12 @@ mod tests {
         paths.iter().map(|path| (*path).to_owned()).collect()
     }
 
-    fn merges(paths: &[&str], keys: Option<&[&str]>) -> Vec<Merge> {
-        paths
-            .iter()
-            .map(|path| Merge {
-                keys: keys.map(owned),
-                path: (*path).to_owned(),
-            })
-            .collect()
-    }
-
     fn manifest(replace: &[&str], merge: &[&str], lines: &[&str], review: &[&str]) -> Manifest {
-        let scripts: Option<&[&str]> = Some(&["scripts"]);
-        let keyed = merges(merge, scripts);
-        let unkeyed = merges(lines, None);
+        let structured = owned(merge);
+        let lines = owned(lines);
+        let merged = structured.into_iter().chain(lines).collect();
         Manifest {
-            merge: keyed.into_iter().chain(unkeyed).collect(),
+            merge: merged,
             replace: owned(replace),
             review: owned(review),
         }
@@ -438,12 +402,11 @@ mod tests {
             .into_iter()
             .map(|entry| entry.strategy)
             .collect::<Vec<_>>();
-        let keys = owned(&["scripts"]);
         assert_eq!(
             strategies,
             [
                 Strategy::Replace,
-                Strategy::Merge(keys),
+                Strategy::Package,
                 Strategy::Lines,
                 Strategy::Review
             ]
@@ -451,25 +414,28 @@ mod tests {
     }
 
     #[test]
-    fn rejects_structured_merges_without_keys() {
+    fn rejects_unsupported_structured_merges() {
         let template = tempfile::tempdir().expect("temporary directory");
         let root = template.path();
-        write_all(root, &["package.json"]);
-        let declared = manifest(&[], &[], &["package.json"], &[]);
+        write_all(root, &["settings.json"]);
+        let declared = manifest(&[], &["settings.json"], &[], &[]);
         let config = project(&[]);
         let result = entries(&declared, root, &config);
-        assert!(matches!(result, Err(Error::MissingKeys(path)) if path == "package.json"));
+        assert!(matches!(result, Err(Error::UnsupportedMerge(path)) if path == "settings.json"));
     }
 
     #[test]
-    fn rejects_line_merges_with_keys() {
+    fn rejects_object_merge_entries() {
         let template = tempfile::tempdir().expect("temporary directory");
         let root = template.path();
-        write_all(root, &[".gitignore"]);
-        let declared = manifest(&[], &[".gitignore"], &[], &[]);
-        let config = project(&[]);
-        let result = entries(&declared, root, &config);
-        assert!(matches!(result, Err(Error::KeysOnLines(path)) if path == ".gitignore"));
+        let path = root.join(MANIFEST_FILE);
+        std::fs::write(
+            path,
+            r#"{"merge":[{"path":".gitignore"}],"replace":[],"review":[]}"#,
+        )
+        .expect("manifest");
+        let result = load(root);
+        assert!(matches!(result, Err(Error::Invalid(..))));
     }
 
     #[test]

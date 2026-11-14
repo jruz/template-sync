@@ -4,7 +4,7 @@ use std::process::Command;
 use crate::utils::binary::{stderr, stdout};
 
 const MANIFEST: &str = r#"{
-  "merge": [{ "keys": ["devDependencies"], "path": "package.json" }],
+  "merge": ["package.json"],
   "replace": ["LICENSE", "scripts/"],
   "review": ["justfile"]
 }

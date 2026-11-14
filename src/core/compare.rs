@@ -8,7 +8,7 @@ pub enum Error {
     #[error("cannot merge {0}")]
     Merge(String, #[source] text::Error),
     #[error("missing project {0}; create it with this repository's identity before syncing")]
-    MissingGithubSettings(String),
+    MissingProject(String),
     #[error("cannot parse {0}")]
     Parse(String, #[source] text::Error),
 }
@@ -154,18 +154,13 @@ fn review(
     })
 }
 
-fn merged(
-    path: &str,
-    contents: &Contents<'_>,
-    project: &str,
-    keys: &[String],
-) -> Result<text::Merged, Error> {
+fn merged(path: &str, contents: &Contents<'_>, project: &str) -> Result<text::Merged, Error> {
     let sources = text::Sources {
         base: contents.base,
         project,
         template: contents.template,
     };
-    match text::merge(path, &sources, keys) {
+    match text::merge(path, &sources) {
         Ok(merged) => Ok(merged),
         Err(source) => {
             let owned = path.to_owned();
@@ -175,13 +170,8 @@ fn merged(
     }
 }
 
-fn data(
-    entry: &manifest::Entry,
-    keys: &[String],
-    contents: &Contents<'_>,
-    project: &str,
-) -> Result<Finding, Error> {
-    let text::Merged { after, before } = merged(&entry.path, contents, project, keys)?;
+fn data(entry: &manifest::Entry, contents: &Contents<'_>, project: &str) -> Result<Finding, Error> {
+    let text::Merged { after, before } = merged(&entry.path, contents, project)?;
     let diff = unified_diff(&entry.path, &before, &after);
     let changed = after != before;
     let found = detail(&entry.path, &before, &after)?;
@@ -240,9 +230,14 @@ pub fn removal(entry: &manifest::Entry, project: &str) -> Finding {
 pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Finding, Error> {
     let template = contents.template;
     let Some(current) = contents.project else {
-        if entry.strategy == manifest::Strategy::GithubSettings {
+        if matches!(
+            entry.strategy,
+            manifest::Strategy::Cargo
+                | manifest::Strategy::GithubSettings
+                | manifest::Strategy::Package
+        ) {
             let path = entry.path.clone();
-            let error = Error::MissingGithubSettings(path);
+            let error = Error::MissingProject(path);
             return Err(error);
         }
         return Ok(Finding {
@@ -255,9 +250,10 @@ pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Findi
         });
     };
     match &entry.strategy {
-        manifest::Strategy::GithubSettings => data(entry, &[], contents, current),
+        manifest::Strategy::Cargo
+        | manifest::Strategy::GithubSettings
+        | manifest::Strategy::Package => data(entry, contents, current),
         manifest::Strategy::Lines => line_merge(entry, contents, current),
-        manifest::Strategy::Merge(keys) => data(entry, keys, contents, current),
         manifest::Strategy::Replace => text(entry, template, current),
         manifest::Strategy::Review => review(entry, contents, current),
     }
@@ -338,8 +334,7 @@ mod tests {
     }
 
     fn engines(template: &str, project: &str) -> Finding {
-        let keys = vec!["engines".to_owned()];
-        let strategy = manifest::Strategy::Merge(keys);
+        let strategy = manifest::Strategy::Package;
         let current = Some(project);
         compare("package.json", strategy, template, current)
     }

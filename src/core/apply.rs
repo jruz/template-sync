@@ -45,9 +45,10 @@ fn write_file(project: &Path, template: &Path, finding: &compare::Finding) -> Re
             let source = template.join(&finding.path);
             replace(&source, &target)
         }
-        manifest::Strategy::GithubSettings
+        manifest::Strategy::Cargo
+        | manifest::Strategy::GithubSettings
         | manifest::Strategy::Lines
-        | manifest::Strategy::Merge(_)
+        | manifest::Strategy::Package
         | manifest::Strategy::Review => std::fs::write(&target, &finding.content),
     };
     written(&target, result)
