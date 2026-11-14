@@ -1,6 +1,9 @@
 mod rust '.just/rust.justfile'
+
 mod release '.just/release.justfile'
+
 mod just '.just/just.justfile'
+
 mod git '.just/git.justfile'
 
 check:
@@ -27,3 +30,5 @@ skill-sync:
     rsync --archive --delete \
         skills/template/ \
         "$HOME/dev/projects/agent-config/skills/template/"
+
+mod tools '.just/tools.justfile'
