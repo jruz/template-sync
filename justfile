@@ -22,3 +22,8 @@ test:
 
 run *ARGS='':
     just rust::run {{ ARGS }}
+
+skill-sync:
+    rsync --archive --delete \
+        skills/template/ \
+        "$HOME/dev/projects/agent-config/skills/template/"

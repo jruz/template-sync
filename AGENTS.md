@@ -21,7 +21,14 @@
 - `core` calls `libs` and `utils`.
 - `libs` calls `utils`.
 - `utils` calls nothing.
-- `just rust::architecture-check` enforces these rules with `scripts/architecture-check.nu`.
+
+## Skill maintenance
+
+- `skills/template/SKILL.md` is the source of truth for the template skill.
+- Keep it up to date when CLI usage or template workflows change.
+- Keep the skill focused on usage rather than implementation details.
+- Do not edit the global copy directly.
+- `just skill-sync` Run after editing it.
 
 ## Development
 
