@@ -2,7 +2,7 @@
   "repository": "jruz/template-sync",
   "settings": {
     "description": "Keep repositories in sync with their template through automerged PRs",
-    "private": true,
+    "private": false,
     "allow_auto_merge": true,
     "allow_merge_commit": false,
     "allow_rebase_merge": false,
