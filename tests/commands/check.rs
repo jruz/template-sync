@@ -5,6 +5,56 @@ use crate::utils::fixtures::{
 };
 
 #[test]
+fn reviews_woodpecker_policy_without_repository_identity() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let template = template_directory(&remotes);
+    let manifest = r#"{"merge":["woodpecker-settings.yaml"],"replace":[],"review":[]}"#;
+    let initial = "repo:\n  name: jruz/template-rs\nsettings:\n  trusted: false\n";
+    write_all(
+        &template,
+        &[
+            ("template.json", manifest),
+            ("woodpecker-settings.yaml", initial),
+        ],
+    );
+    commit_changes(&template);
+    let revision = template_revision(&remotes);
+    let config = project_file(&revision, "\"woodpecker-settings.yaml\"");
+    let local = "repo:\n  name: jruz/project\nsettings:\n  trusted: false\n";
+    write_all(
+        root,
+        &[
+            ("template-sync.json", &config),
+            ("woodpecker-settings.yaml", local),
+        ],
+    );
+    for arguments in [&["check"][..], &["check", "--review"][..]] {
+        let output = run(root, origin, arguments);
+        assert!(output.status.success(), "{}", stderr(&output));
+        assert_eq!(stdout(&output), "in sync\n");
+    }
+    let updated = "repo:\n  name: jruz/renamed-template\nsettings:\n  trusted: true\n";
+    write_all(&template, &[("woodpecker-settings.yaml", updated)]);
+    commit_changes(&template);
+    for arguments in [&["check"][..], &["check", "--review"][..]] {
+        let output = run(root, origin, arguments);
+        assert!(output.status.success(), "{}", stderr(&output));
+        let report = stdout(&output);
+        assert!(report.contains("REVIEW woodpecker-settings.yaml#settings.trusted"));
+        assert!(!report.contains("#repo"));
+        assert_eq!(read(root, "woodpecker-settings.yaml"), local);
+    }
+    let applied = "repo:\n  name: jruz/project\nsettings:\n  trusted: true\n";
+    write_all(root, &[("woodpecker-settings.yaml", applied)]);
+    let output = run(root, origin, &["check"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(stdout(&output), "in sync\n");
+}
+
+#[test]
 fn reports_drift() {
     let remotes = remotes();
     let origin = remotes.path();
@@ -133,7 +183,9 @@ fn refuses_to_copy_template_github_identity_into_missing_project_settings() {
     commit_changes(&template);
     let output = run(root, origin, &["check"]);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("missing project github-settings.json"));
+    assert!(stderr(&output).contains(
+        "missing project github-settings.json; run `github-settings pull`, commit github-settings.json, then retry template-sync"
+    ));
     assert!(!root.join("github-settings.json").exists());
 }
 

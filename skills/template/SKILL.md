@@ -61,6 +61,12 @@ To manage a synced file manually, add its path to the project's `review` array i
 - Automatic sync drift fails `check`.
 - `pull` preserves review files when the template deletes them.
 
+## Apply repository settings
+
+- After pulling changes to `github-settings.json`, run `github-settings plan` and review the changes before running `github-settings push`.
+- After pulling changes to `woodpecker-settings.yaml`, run `woodpecker-settings plan` and review the changes before running `woodpecker-settings apply`.
+- Run the corresponding plan command again to confirm no drift.
+
 ## Missing GitHub settings
 
 - Run `github-settings pull` to create a missing `github-settings.json` from the repository's live settings.

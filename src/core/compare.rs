@@ -1,5 +1,5 @@
 use crate::core::manifest;
-use crate::libs::document::{format, keys, lines, text};
+use crate::libs::document::{format, keys, lines, text, woodpecker_settings};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -7,6 +7,10 @@ pub enum Error {
     Lines(String, #[source] lines::Error),
     #[error("cannot merge {0}")]
     Merge(String, #[source] text::Error),
+    #[error(
+        "missing project github-settings.json; run `github-settings pull`, commit github-settings.json, then retry template-sync"
+    )]
+    MissingGithubSettings,
     #[error("missing project {0}; create it with this repository's identity before syncing")]
     MissingProject(String),
     #[error("cannot parse {0}")]
@@ -138,6 +142,16 @@ fn review(
     contents: &Contents<'_>,
     project: &str,
 ) -> Result<Finding, Error> {
+    if entry.path == woodpecker_settings::FILE {
+        let local = data(entry, contents, project)?;
+        let Some(base) = contents.base else {
+            return Ok(local);
+        };
+        if local.status == Status::Matching {
+            return Ok(local);
+        }
+        return data(entry, contents, base);
+    }
     let Some(base) = contents.base else {
         return text(entry, contents.template, project);
     };
@@ -230,10 +244,12 @@ pub fn removal(entry: &manifest::Entry, project: &str) -> Finding {
 pub fn finding(entry: &manifest::Entry, contents: &Contents<'_>) -> Result<Finding, Error> {
     let template = contents.template;
     let Some(current) = contents.project else {
+        if matches!(entry.strategy, manifest::Strategy::GithubSettings) {
+            return Err(Error::MissingGithubSettings);
+        }
         if matches!(
             entry.strategy,
             manifest::Strategy::Cargo
-                | manifest::Strategy::GithubSettings
                 | manifest::Strategy::Package
                 | manifest::Strategy::WoodpeckerSettings
         ) {
