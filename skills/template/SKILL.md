@@ -9,11 +9,11 @@ description: Sync a repository with its template using template-sync. Use when i
 
 The template's `template.json` assigns synced paths to these modes:
 
-| Mode      | How it works                                                                       |
-| --------- | ---------------------------------------------------------------------------------- |
-| `replace` | `pull` overwrites the file with the template version.                              |
-| `merge`   | `pull` combines template content with project content. See merged files.           |
-| `review`  | You apply relevant template changes manually. `pull` leaves the file untouched.    |
+| Mode      | How it works                                                                    |
+| --------- | ------------------------------------------------------------------------------- |
+| `replace` | `pull` overwrites the file with the template version.                           |
+| `merge`   | `pull` combines template content with project content. See merged files.        |
+| `review`  | You apply relevant template changes manually. `pull` leaves the file untouched. |
 
 ## Merged files
 
