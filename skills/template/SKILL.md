@@ -12,18 +12,48 @@ The template's `template.json` assigns synced paths to these modes:
 | Mode      | How it works                                                                       |
 | --------- | ---------------------------------------------------------------------------------- |
 | `replace` | `pull` overwrites the file with the template version.                              |
-| `merge`   | `pull` combines template settings with project settings using file-specific rules. |
+| `merge`   | `pull` combines template content with project content. See merged files.           |
 | `review`  | You apply relevant template changes manually. `pull` leaves the file untouched.    |
 
-## Justfile merging
+## Merged files
 
-- Root `justfile` merge entries use a parser-backed three-way merge.
-- Independent template edits merge with project-specific recipe steps.
-- Project-only recipes and declarations remain intact.
-- Existing project item order is preserved.
-- New template items are appended.
-- Conflicting edits stop the pull before files or the revision change.
-- Resolve the reported item against the template before retrying.
+### package.json
+
+- The template manages `scripts`, `dependencies`, `devDependencies`, `engines`, `private`, and `type`.
+- Inside those sections, packages and scripts the template defines get the template's version.
+- Packages and scripts you added yourself are kept.
+- Packages and scripts the template stops defining are removed.
+- Everything else, such as `name` and `version`, is yours.
+
+### Cargo.toml
+
+- The template manages `[build-dependencies]`, `[lints]`, and `[profile]`.
+- Inside those sections, entries the template defines get the template's value.
+- Entries you added yourself are kept.
+- Entries the template stops defining are removed.
+- `[package]` and `[dependencies]` are yours.
+
+### justfile
+
+- Template recipes get the template's changes.
+- Recipes you added yourself are kept.
+- Lines you added inside template recipes are kept.
+- When your edit and the template's edit collide, `pull` stops without changing anything.
+- Resolve the reported recipe against the template before retrying.
+
+### github-settings.json
+
+- `branch_protection`, `actions`, `security`, and `labels` are replaced by the template.
+- `settings` gets the template's values, except `description`, `private`, and `is_template`.
+
+### woodpecker-settings.yaml
+
+- Everything is replaced by the template, except `repo`.
+
+### Other files
+
+- Lines above `# project entries below, everything above is managed by template-sync` come from the template.
+- Lines below it are yours.
 
 ## Project overrides
 
