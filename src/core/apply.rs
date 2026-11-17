@@ -56,11 +56,7 @@ fn write_file(project: &Path, template: &Path, finding: &compare::Finding) -> Re
     written(&target, result)
 }
 
-pub fn write(
-    project: &Path,
-    template: &Path,
-    findings: &[compare::Finding],
-) -> Result<Vec<String>, Error> {
+pub fn write(project: &Path, template: &Path, findings: &[compare::Finding]) -> Result<(), Error> {
     let targets = findings
         .iter()
         .filter(|finding| compare::needs_update(finding))
@@ -77,6 +73,5 @@ pub fn write(
     }
     targets
         .iter()
-        .try_for_each(|finding| write_file(project, template, finding))?;
-    Ok(paths)
+        .try_for_each(|finding| write_file(project, template, finding))
 }

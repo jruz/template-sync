@@ -10,8 +10,19 @@ fn writes_project_and_keeps_review_files() {
     let origin = remotes.path();
     let project = project(&remotes);
     let root = project.path();
+    let template = template_directory(&remotes);
+    write_all(&template, &[("justfile", "check:\n    just lint\n")]);
+    commit_changes(&template);
+    let revision = template_revision(&remotes);
     let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
+    let output = stdout(&updated);
+    assert!(output.starts_with(
+        "OVERWRITTEN (2)\n  LICENSE\n  scripts/lib/log.ts\n\nMODIFIED (1)\n  package.json\n\nREVIEW justfile\n"
+    ));
+    assert!(output.ends_with(&format!("REVIEW (1)\n  justfile\n\nrevision {revision}\n")));
+    assert!(!output.contains("CHANGED"));
+    assert!(!output.contains("MISSING"));
     assert_eq!(read(root, "LICENSE"), "licence\n");
     assert_eq!(read(root, "scripts/lib/log.ts"), "export {};\n");
     assert_eq!(
@@ -202,6 +213,10 @@ fn deletes_files_the_template_removed_since_revision() {
     assert!(stdout(&previewed).contains("DELETED (1)\n  scripts/lib/log.ts\n"));
     let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
+    let output = stdout(&updated);
+    assert!(output.contains("OVERWRITTEN (2)\n  LICENSE\n  scripts/lib/run.ts\n"));
+    assert!(output.contains("DELETED (1)\n  scripts/lib/log.ts\n"));
+    assert!(!output.contains("REMOVED"));
     assert!(!root.join("scripts/lib/log.ts").exists());
     assert_eq!(read(root, "scripts/lib/run.ts"), "export {};\n");
 }

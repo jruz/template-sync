@@ -187,6 +187,16 @@ fn summary(style: Style, pending: &[&compare::Finding]) -> String {
     .join("\n")
 }
 
+fn detailed(style: Style, pending: &[&compare::Finding]) -> String {
+    let details = pending
+        .iter()
+        .flat_map(|finding| blocks(style, finding))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let grouped = summary(style, pending);
+    format!("{details}\n{grouped}")
+}
+
 #[must_use]
 pub fn render(findings: &[compare::Finding], style: Style) -> String {
     let pending = findings
@@ -196,13 +206,20 @@ pub fn render(findings: &[compare::Finding], style: Style) -> String {
     if pending.is_empty() {
         return "in sync\n".to_owned();
     }
-    let details = pending
+    detailed(style, &pending)
+}
+
+#[must_use]
+pub fn reviews(findings: &[compare::Finding], style: Style) -> Option<String> {
+    let pending = findings
         .iter()
-        .flat_map(|finding| blocks(style, finding))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let grouped = summary(style, &pending);
-    format!("{details}\n{grouped}")
+        .filter(|finding| compare::needs_review(finding))
+        .collect::<Vec<_>>();
+    if pending.is_empty() {
+        return None;
+    }
+    let rendered = detailed(style, &pending);
+    Some(rendered)
 }
 
 #[must_use]

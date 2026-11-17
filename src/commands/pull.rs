@@ -38,17 +38,22 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
             text: preview::render(&findings, style),
         });
     }
-    let written = apply::write(&project, roots.template, &findings)?;
+    apply::write(&project, roots.template, &findings)?;
     let revision = source::head(&template)?;
     manifest::record(&project, config, &revision)?;
-    let updates = written
-        .iter()
-        .map(|path| format!("updated {path}\n"))
-        .collect::<Vec<_>>()
-        .concat();
-    let rendered = report::render(&findings, style);
+    let applied = preview::render(&findings, style);
+    let recorded = format!("revision {revision}\n");
+    let sections = [
+        Some(applied),
+        report::reviews(&findings, style),
+        Some(recorded),
+    ];
     Ok(Output {
         success: true,
-        text: format!("{updates}revision {revision}\n{rendered}"),
+        text: sections
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n"),
     })
 }
