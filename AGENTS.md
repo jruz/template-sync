@@ -35,3 +35,8 @@
 - Use `justfile` and `.just/` recipes for development tasks.
 - Run Cargo commands through `sandbox`.
 - Run `just check`, `just test`, and `slop-detector` after changes.
+
+## Release
+
+- Push the changes to `main` before starting a release.
+- Run `just release bump <patch|minor|major>` to start a Woodpecker release based on the version on `origin/main`.
