@@ -56,36 +56,57 @@ fn merge_item(
     Err(error)
 }
 
-pub fn sync(template: &str, base: Option<&str>, project: &str) -> Result<String, Error> {
-    let current = project;
-    let template = parse::items(template)?;
-    let project = parse::items(project)?;
-    let baseline = base.ok_or(Error::MissingBase)?;
-    let original = parse::items(baseline)?;
-    let mut keys = Vec::new();
-    for item in project.iter().chain(&template).chain(&original) {
-        let key = item.key.as_str();
-        if !keys.contains(&key) {
-            keys.push(key);
+fn update_existing(
+    source: &str,
+    project: &[parse::Item<'_>],
+    original: &[parse::Item<'_>],
+    template: &[parse::Item<'_>],
+) -> Result<String, Error> {
+    let mut output = source.to_owned();
+    for item in project.iter().rev() {
+        let base = lookup(original, &item.key);
+        let upstream = lookup(template, &item.key);
+        if base == upstream {
+            continue;
+        }
+        let local = Some(item.text);
+        let merged = merge_item(&item.key, base, upstream, local)?;
+        let span = item.span.clone();
+        match merged {
+            Some(text) => output.replace_range(span, &text),
+            None => output.replace_range(span, ""),
         }
     }
-    let merged = keys
-        .into_iter()
-        .map(|key| {
-            let old_item = lookup(&original, key);
-            let template_item = lookup(&template, key);
-            let project_item = lookup(&project, key);
-            merge_item(key, old_item, template_item, project_item)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let present = merged.into_iter().flatten().collect::<Vec<_>>();
-    let previous = project.iter().map(|item| item.text);
-    if present.iter().map(String::as_str).eq(previous) {
-        let unchanged = current.to_owned();
-        return Ok(unchanged);
+    Ok(output)
+}
+
+fn append(output: &mut String, item: &str) {
+    if !output.is_empty() && !output.ends_with("\n\n") {
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output.push('\n');
     }
-    let content = present.join("\n\n");
-    let output = format!("{content}\n");
+    output.push_str(item);
+    output.push('\n');
+}
+
+pub fn sync(template: &str, base: Option<&str>, project: &str) -> Result<String, Error> {
+    let baseline = base.ok_or(Error::MissingBase)?;
+    let original = parse::items(baseline)?;
+    let template = parse::items(template)?;
+    let items = parse::items(project)?;
+    let mut output = update_existing(project, &items, &original, &template)?;
+    for item in &template {
+        if lookup(&items, &item.key).is_some() {
+            continue;
+        }
+        let previous = lookup(&original, &item.key);
+        let upstream = Some(item.text);
+        if let Some(text) = merge_item(&item.key, previous, upstream, None)? {
+            append(&mut output, &text);
+        }
+    }
     parse::items(&output)?;
     Ok(output)
 }

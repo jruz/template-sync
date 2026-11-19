@@ -114,6 +114,35 @@ fn removes_unchanged_template_recipes_and_keeps_local_edits() {
 }
 
 #[test]
+fn updates_managed_recipe_without_touching_inline_nushell() {
+    let local = "# Local logging\nlogs-show:\n    #!/usr/bin/env nu\n    [1] | each {|entry|\n        {\n            value: $entry\n        }\n    }\n";
+    assert_preserves_local_recipe(local);
+}
+
+#[test]
+fn updates_managed_recipe_without_touching_github_settings_logs_show() {
+    let local = include_str!("../data/github-settings-logs-show.txt");
+    assert_preserves_local_recipe(local);
+}
+
+fn assert_preserves_local_recipe(local: &str) {
+    let base = "check:\n    just old\n";
+    let updated = "check:\n    just new\n";
+    let current = format!("{base}\n\n{local}");
+    let (remotes, project) = setup(base, &current, updated);
+    let root = project.path();
+    let origin = remotes.path();
+    let pulled = pull(root, origin);
+    assert!(pulled.status.success(), "{}", binary::stderr(&pulled));
+    let expected = format!("{updated}\n\n{local}");
+    assert_eq!(
+        fixtures::read(root, "justfile"),
+        expected,
+        "pull must update only the managed recipe"
+    );
+}
+
+#[test]
 fn rejects_invalid_syntax_without_writing() {
     let (remotes, project) = setup("check:\n", "check:\n", "check [\n");
     let root = project.path();

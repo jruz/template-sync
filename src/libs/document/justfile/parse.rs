@@ -16,6 +16,7 @@ pub enum Error {
 
 pub struct Item<'text> {
     pub key: String,
+    pub span: std::ops::Range<usize>,
     pub text: &'text str,
 }
 
@@ -68,17 +69,27 @@ fn key(node: tree_sitter::Node<'_>, source: &str) -> Result<String, Error> {
     Ok(key)
 }
 
+fn has_structure_error(node: tree_sitter::Node<'_>) -> bool {
+    if node.is_error() || node.is_missing() {
+        return true;
+    }
+    if !node.has_error() || node.kind() == "recipe_body" {
+        return false;
+    }
+    let mut cursor = node.walk();
+    node.children(&mut cursor).any(has_structure_error)
+}
+
 pub fn items(source: &str) -> Result<Vec<Item<'_>>, Error> {
     let mut parser = tree_sitter::Parser::new();
     let language = tree_sitter_just::LANGUAGE.into();
     parser.set_language(&language)?;
     let tree = parser.parse(source, None).ok_or(Error::Interrupted)?;
     let root = tree.root_node();
-    if root.has_error() {
+    if has_structure_error(root) {
         return Err(Error::Syntax);
     }
     let mut cursor = root.walk();
-    let mut start = 0;
     let mut found = Vec::new();
     for node in root
         .named_children(&mut cursor)
@@ -89,17 +100,12 @@ pub fn items(source: &str) -> Result<Vec<Item<'_>>, Error> {
             let error = Error::Duplicate(key);
             return Err(error);
         }
-        let end = node.end_byte();
-        let text = source.get(start..end).ok_or(Error::Syntax)?.trim();
-        found.push(Item { key, text });
-        start = end;
-    }
-    let tail = source.get(start..).ok_or(Error::Syntax)?.trim();
-    if !tail.is_empty() {
-        found.push(Item {
-            key: "trailing-comments".to_owned(),
-            text: tail,
-        });
+        let source_span = node.byte_range();
+        let start = source_span.start;
+        let raw = source.get(source_span).ok_or(Error::Syntax)?;
+        let text = raw.trim_end();
+        let span = start..start + text.len();
+        found.push(Item { key, span, text });
     }
     Ok(found)
 }
