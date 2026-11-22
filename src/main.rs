@@ -7,7 +7,7 @@ use std::io::IsTerminal as _;
 use std::process::ExitCode;
 
 use clap::Parser as _;
-use commands::{check, init, pull, update_repositories, version};
+use commands::{check, init, new, pull, update_repositories, version};
 use utils::error;
 use utils::output::Output;
 use utils::style::Style;
@@ -21,6 +21,8 @@ enum Command {
     },
     #[command(about = "Make the project follow the template that matches its files")]
     Init,
+    #[command(about = "Create a GitHub repository from a template with Woodpecker CI")]
+    New(new::Arguments),
     #[command(about = "Pull template changes into the project")]
     Pull {
         #[arg(long, help = "List the files that would change without writing them")]
@@ -54,6 +56,8 @@ enum Error {
     #[error(transparent)]
     Init(#[from] init::Error),
     #[error(transparent)]
+    New(#[from] new::Error),
+    #[error(transparent)]
     Pull(#[from] pull::Error),
     #[error(transparent)]
     UpdateRepositories(#[from] update_repositories::Error),
@@ -63,6 +67,7 @@ fn run(command: Command, style: Style) -> Result<Output, Error> {
     let output = match command {
         Command::Check { review } => check::run(review, style)?,
         Command::Init => init::run()?,
+        Command::New(arguments) => new::run(arguments)?,
         Command::Pull { dry_run } => pull::run(dry_run, style)?,
         Command::UpdateRepositories { dry_run, account } => {
             update_repositories::run(&account, dry_run, style)?

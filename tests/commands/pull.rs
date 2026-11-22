@@ -95,7 +95,9 @@ fn syncs_github_policy_and_preserves_repository_settings() {
         "allow_auto_merge": true, "allow_merge_commit": false,
         "delete_branch_on_merge": true, "default_branch": "main"
     });
-    for key in ["branch_protection", "actions", "security", "labels"] {
+    *expected.get_mut("security").expect("security") =
+        serde_json::json!({"vulnerability_alerts": true});
+    for key in ["branch_protection", "actions", "labels"] {
         *expected.get_mut(key).expect("project policy key") =
             policy.get(key).expect("template policy key").clone();
     }

@@ -39,10 +39,11 @@ fn settings(template: &Object, project: &Object) -> Result<Value, Error> {
     let current = required(project, "settings", "project")?;
     let expected = object(expected, "template.settings")?;
     let current = object(current, "project.settings")?;
+    let unprotected = private_without_protection(project);
     let owned = ["description", "private", "is_template"];
     let shared = expected.iter().filter(|(key, _)| {
         let key = key.as_str();
-        !owned.contains(&key)
+        !(owned.contains(&key) || unprotected && key == "allow_auto_merge")
     });
     let initial = current.clone();
     let merged = shared.fold(initial, |settings, (key, value)| {
@@ -59,6 +60,29 @@ fn insert(mut object: Object, key: &str, value: Value) -> Object {
     object
 }
 
+pub fn normalize_security(config: &mut Object) {
+    let Some(security) = config.get_mut("security").and_then(Value::as_object_mut) else {
+        return;
+    };
+    for (legacy, current) in [
+        ("vulnerability-alerts", "vulnerability_alerts"),
+        ("automated-security-fixes", "automated_security_fixes"),
+    ] {
+        if let Some(value) = security.shift_remove(legacy) {
+            let key = current.to_owned();
+            security.entry(key).or_insert(value);
+        }
+    }
+}
+
+fn private_without_protection(project: &Object) -> bool {
+    let private = project
+        .get("settings")
+        .and_then(|value| value.get("private"));
+    matches!(private, Some(Value::Bool(true)))
+        && matches!(project.get("branch_protection"), Some(Value::Null))
+}
+
 pub fn sync(template: &Value, project: &Value) -> Result<Value, Error> {
     let expected = object(template, "template")?;
     let current = object(project, "project")?;
@@ -66,11 +90,16 @@ pub fn sync(template: &Value, project: &Value) -> Result<Value, Error> {
     let initial = current.clone();
     let initial = insert(initial, "settings", settings);
     let shared = ["branch_protection", "actions", "security", "labels"];
-    let merged = shared.into_iter().try_fold(initial, |merged, key| {
+    let unprotected = private_without_protection(current);
+    let mut merged = shared.into_iter().try_fold(initial, |merged, key| {
+        if key == "branch_protection" && unprotected {
+            return Ok(merged);
+        }
         let value = required(expected, key, "template")?.clone();
         let inserted = insert(merged, key, value);
         Ok::<_, Error>(inserted)
     })?;
+    normalize_security(&mut merged);
     let value = Value::Object(merged);
     Ok(value)
 }

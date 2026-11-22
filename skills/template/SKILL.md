@@ -1,6 +1,6 @@
 ---
 name: template
-description: Sync a repository with its template using template-sync. Use when initializing from template-rs or template-ts, checking template drift, pulling synced files, or resolving REVIEW diffs.
+description: Create and sync repositories with template-sync. Use when creating Rust or TypeScript projects, checking template drift, pulling synced files, or resolving REVIEW diffs.
 ---
 
 # Template Sync
@@ -43,8 +43,10 @@ The template's `template.json` assigns synced paths to these modes:
 
 ### github-settings.json
 
-- `branch_protection`, `actions`, `security`, and `labels` are replaced by the template.
+- `branch_protection`, `actions`, `security`, and `labels` come from the template.
+- Private repositories keep `"branch_protection": null` when already configured.
 - `settings` gets the template's values, except `description`, `private`, and `is_template`.
+- Private repositories without branch protection keep their `allow_auto_merge` setting.
 
 ### woodpecker-settings.yaml
 
@@ -110,19 +112,32 @@ To manage a synced file manually, add its path to the project's `review` array i
 | Rust       | [jruz/template-rs](https://github.com/jruz/template-rs) |
 | TypeScript | [jruz/template-ts](https://github.com/jruz/template-ts) |
 
-Rust:
+Run `template-sync new PROJECT` from the parent directory. The wizard prompts for missing options and previews GitHub and Woodpecker settings before applying them.
+
+For automation, pass every option and approve the changes:
 
 ```sh
-gh repo create jruz/PROJECT --template jruz/template-rs --private --clone
+template-sync new PROJECT --owner jruz --template rust --visibility private \
+  --description 'Project description' --topics cli,rust --non-interactive --yes
 ```
 
-TypeScript:
+- Authenticate `gh`, SSH, `github-settings`, `woodpecker-cli`, and `woodpecker-settings` first.
+- Install `oxfmt` to format the generated files.
+- Pass `--description ''` or `--topics ''` to leave those fields empty.
+- Private repositories start without GitHub branch protection or auto-merge so they work on GitHub Free.
+- Install `direnv` before creating a project.
+- `just setup` enables Git hooks in the Rust checkout.
+- `just setup` approves `.envrc` in both templates.
+- `just setup` runs in the TypeScript checkout’s Nix shell.
+- TypeScript setup needs Nix and Docker to install dependencies through sandboxed `pnpm`.
+- Woodpecker is always activated before the first project push.
+- The command commits and pushes the generated project to the default branch.
+- Release secrets are not copied or provisioned.
+- Changes to visibility or secrets make Woodpecker settings review-only during sync.
+- If provisioning stops, inspect the remote and local checkout before finishing setup.
+- The command does not delete partial repositories.
 
-```sh
-gh repo create jruz/PROJECT --template jruz/template-ts --private --clone
-```
-
-Enter the cloned project directory and run `template-sync init` to create `template-sync.json`.
+For an existing checkout, run `template-sync init` to create `template-sync.json`.
 
 - `Cargo.toml` selects `jruz/template-rs`.
 - `package.json` selects `jruz/template-ts` when no `Cargo.toml` exists.

@@ -20,6 +20,15 @@ template-sync pull
 
 See the [template skill](skills/template/SKILL.md) for sync rules and the full workflow.
 
+## Template demos
+
+- `just new-demo rust` creates a private demo at `tmp/template-sync-rust-demo/`.
+- `just new-demo typescript` creates a private demo at `tmp/template-sync-ts-demo/`.
+- `just new-delete jruz/template-sync-rust-demo` permanently removes the Rust demo.
+- `just new-delete jruz/template-sync-ts-demo` permanently removes the TypeScript demo.
+
+Deletion removes the Woodpecker record, GitHub repository, and local checkout.
+
 ## Licence
 
 Licensed under the [EUPL 1.2](LICENSE).

@@ -3,6 +3,7 @@ pub mod apply;
 pub mod compare;
 pub mod detect;
 pub mod manifest;
+pub mod new_project;
 pub mod preview;
 pub mod report;
 pub mod snapshot;
