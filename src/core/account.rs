@@ -44,6 +44,7 @@ pub struct Repository {
 struct Checkout<'run> {
     config: &'run manifest::Project,
     findings: &'run [compare::Finding],
+    name: &'run str,
     project: &'run Path,
     template: &'run Path,
 }
@@ -74,6 +75,7 @@ fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
         base,
         body,
         branch,
+        repository: checkout.name.to_owned(),
         title,
     };
     github::pull_request(checkout.project, &request)?;
@@ -115,6 +117,7 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
     publish(&Checkout {
         config: &project_config,
         findings: &findings,
+        name,
         project: project_path,
         template: template_path,
     })

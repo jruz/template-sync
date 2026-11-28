@@ -12,6 +12,7 @@ pub struct PullRequest {
     pub base: String,
     pub body: String,
     pub branch: String,
+    pub repository: String,
     pub title: String,
 }
 
@@ -108,9 +109,19 @@ pub fn pull_request(directory: &Path, request: &PullRequest) -> Result<(), Error
             ],
         )?;
     } else {
+        let endpoint = format!("repos/{}/pulls/{}", request.repository, existing);
+        let body = format!("body={}", request.body);
         gh(
             directory,
-            &["pr", "edit", &request.branch, "--body", &request.body],
+            &[
+                "api",
+                "--method",
+                "PATCH",
+                &endpoint,
+                "--raw-field",
+                &body,
+                "--silent",
+            ],
         )?;
     }
     gh(

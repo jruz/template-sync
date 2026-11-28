@@ -1,10 +1,15 @@
 #!/bin/sh
 echo "$*" >> "$GH_LOG"
-case "$1" in
-  repo)
+case "$1 $2" in
+  "repo "*)
     printf '%s\n' $GH_REPOSITORIES
     ;;
-  api)
+  "pr list")
+    printf '%s\n' $GH_OPEN_PULL_REQUESTS
+    ;;
+  "api --method")
+    ;;
+  "api "*)
     path=${2#repos/*/}
     name=${path%%/*}
     file=${path#*/contents/}
