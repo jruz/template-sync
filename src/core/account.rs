@@ -73,10 +73,6 @@ fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
     let title = format!("[tool] Template: Sync with {template_repository}");
     let message = format!("{title}@{revision}");
     git::commit_all(checkout.project, &message)?;
-    if git::matches_remote(checkout.project, &branch)? {
-        return Ok(Outcome::Unchanged);
-    }
-    git::push(checkout.project, &branch)?;
     let body = report::markdown(template_repository, &revision, checkout.findings);
     let request = github::PullRequest {
         base,
@@ -85,6 +81,11 @@ fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
         repository: checkout.name.to_owned(),
         title,
     };
+    if git::matches_remote(checkout.project, &request.branch)? {
+        github::refresh_body(checkout.project, &request)?;
+        return Ok(Outcome::Unchanged);
+    }
+    git::push(checkout.project, &request.branch)?;
     github::pull_request(checkout.project, &request)?;
     Ok(Outcome::Updated)
 }

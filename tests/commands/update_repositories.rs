@@ -66,6 +66,22 @@ fn opens_pull_request_once() {
 }
 
 #[test]
+fn refreshes_open_pull_request_body_when_branch_is_up_to_date() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    remote_project(&remotes, "project");
+    other(&remotes);
+    let log = origin.join("gh.log");
+    let first = update_repositories(origin, &log, &[]);
+    assert!(first.status.success(), "{}", stderr(&first));
+    assert!(!read(origin, "gh.log").contains("api --method PATCH"));
+    let second = update_repositories_with(origin, &log, &[], "7");
+    assert!(second.status.success(), "{}", stderr(&second));
+    assert!(stdout(&second).contains("jruz/project: pull request up to date\n"));
+    assert!(read(origin, "gh.log").contains("api --method PATCH repos/jruz/project/pulls/7"));
+}
+
+#[test]
 fn formats_written_files_before_committing() {
     let remotes = remotes();
     let origin = remotes.path();

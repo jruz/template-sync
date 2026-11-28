@@ -76,14 +76,14 @@ pub fn root_file(repository: &str, name: &str, directory: &Path) -> Result<Optio
     Ok(found)
 }
 
-pub fn pull_request(directory: &Path, request: &PullRequest) -> Result<(), Error> {
-    let existing = gh(
+fn open_pull_request(directory: &Path, branch: &str) -> Result<String, Error> {
+    gh(
         directory,
         &[
             "pr",
             "list",
             "--head",
-            &request.branch,
+            branch,
             "--state",
             "open",
             "--json",
@@ -91,7 +91,38 @@ pub fn pull_request(directory: &Path, request: &PullRequest) -> Result<(), Error
             "--jq",
             ".[].number",
         ],
+    )
+}
+
+fn update_body(directory: &Path, request: &PullRequest, number: &str) -> Result<(), Error> {
+    let endpoint = format!("repos/{}/pulls/{number}", request.repository);
+    let body = format!("body={}", request.body);
+    gh(
+        directory,
+        &[
+            "api",
+            "--method",
+            "PATCH",
+            &endpoint,
+            "--raw-field",
+            &body,
+            "--silent",
+        ],
     )?;
+    Ok(())
+}
+
+pub fn refresh_body(directory: &Path, request: &PullRequest) -> Result<(), Error> {
+    let existing = open_pull_request(directory, &request.branch)?;
+    if existing.is_empty() {
+        Ok(())
+    } else {
+        update_body(directory, request, &existing)
+    }
+}
+
+pub fn pull_request(directory: &Path, request: &PullRequest) -> Result<(), Error> {
+    let existing = open_pull_request(directory, &request.branch)?;
     if existing.is_empty() {
         gh(
             directory,
@@ -109,20 +140,7 @@ pub fn pull_request(directory: &Path, request: &PullRequest) -> Result<(), Error
             ],
         )?;
     } else {
-        let endpoint = format!("repos/{}/pulls/{}", request.repository, existing);
-        let body = format!("body={}", request.body);
-        gh(
-            directory,
-            &[
-                "api",
-                "--method",
-                "PATCH",
-                &endpoint,
-                "--raw-field",
-                &body,
-                "--silent",
-            ],
-        )?;
+        update_body(directory, request, &existing)?;
     }
     gh(
         directory,
