@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use crate::core::apply;
 use crate::core::compare;
 use crate::core::manifest;
 use crate::core::report;
 use crate::core::snapshot;
+use crate::core::source;
+use crate::core::sync::pipeline;
 use crate::libs::git;
 use crate::libs::github;
 use crate::utils::error;
@@ -13,8 +14,6 @@ use crate::utils::style::Style;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    Apply(#[from] apply::Error),
     #[error(transparent)]
     Git(#[from] git::Error),
     #[error(transparent)]
@@ -25,6 +24,10 @@ pub enum Error {
     Manifest(#[from] manifest::Error),
     #[error(transparent)]
     Snapshot(#[from] snapshot::Error),
+    #[error(transparent)]
+    Source(#[from] source::Error),
+    #[error(transparent)]
+    Sync(#[from] pipeline::Error),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -46,7 +49,7 @@ struct Checkout<'run> {
     findings: &'run [compare::Finding],
     name: &'run str,
     project: &'run Path,
-    template: &'run Path,
+    template: &'run tempfile::TempDir,
 }
 
 fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
@@ -54,12 +57,16 @@ fn publish(checkout: &Checkout<'_>) -> Result<Outcome, Error> {
     let name = manifest::template_name(template_repository)?;
     let branch = format!("template-sync/{name}");
     let base = git::branch(checkout.project)?;
-    let revision = git::revision(checkout.template)?;
-    let head = git::head(checkout.template)?;
+    let template_root = checkout.template.path();
+    let revision = git::revision(template_root)?;
     git::checkout(checkout.project, &branch)?;
-    apply::write(checkout.project, checkout.template, checkout.findings)?;
     let config = checkout.config.clone();
-    manifest::record(checkout.project, config, &head)?;
+    pipeline::apply(
+        checkout.project,
+        checkout.template,
+        config,
+        checkout.findings,
+    )?;
     if git::is_clean(checkout.project)? {
         return Ok(Outcome::InSync);
     }
@@ -90,20 +97,12 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
     let project = tempfile::tempdir_in(workspace)?;
     let project_path = project.path();
     git::clone(name, project_path)?;
-    let template = tempfile::tempdir_in(workspace)?;
-    let template_path = template.path();
-    git::clone(&project_config.template, template_path)?;
-    let base = tempfile::tempdir_in(workspace)?;
-    let base_path = base.path();
-    git::clone_at(
-        &project_config.template,
-        &project_config.revision,
-        base_path,
-    )?;
+    let template = source::clone(&project_config.template)?;
+    let base = source::clone_at(&project_config.template, &project_config.revision)?;
     let roots = snapshot::Roots {
-        base: base_path,
+        base: base.path(),
         project: project_path,
-        template: template_path,
+        template: template.path(),
     };
     let findings = snapshot::findings(&roots, &project_config, snapshot::Review::Upstream)?;
     if !report::failed(&findings) {
@@ -119,7 +118,7 @@ fn repository(name: &str, workspace: &Path, dry_run: bool, style: Style) -> Resu
         findings: &findings,
         name,
         project: project_path,
-        template: template_path,
+        template: &template,
     })
 }
 

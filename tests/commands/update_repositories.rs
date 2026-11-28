@@ -66,6 +66,22 @@ fn opens_pull_request_once() {
 }
 
 #[test]
+fn formats_written_files_before_committing() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    remote_project(&remotes, "project");
+    other(&remotes);
+    let log = origin.join("gh.log");
+    let output = update_repositories(origin, &log, &[]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(
+        read(origin, "nix-calls"),
+        "run nixpkgs#oxfmt -- --write package.json\n\
+         run nixpkgs#oxfmt -- --write template-sync.json\n"
+    );
+}
+
+#[test]
 fn updates_existing_pull_request_body_through_the_api() {
     let remotes = remotes();
     let origin = remotes.path();

@@ -1,19 +1,14 @@
-use crate::core::apply;
-use crate::core::formatter;
 use crate::core::manifest;
 use crate::core::preview;
 use crate::core::report;
 use crate::core::snapshot;
 use crate::core::source;
+use crate::core::sync::pipeline;
 use crate::utils::output::Output;
 use crate::utils::style::Style;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    Apply(#[from] apply::Error),
-    #[error(transparent)]
-    Formatter(#[from] formatter::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -22,6 +17,8 @@ pub enum Error {
     Snapshot(#[from] snapshot::Error),
     #[error(transparent)]
     Source(#[from] source::Error),
+    #[error(transparent)]
+    Sync(#[from] pipeline::Error),
 }
 
 pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
@@ -41,11 +38,7 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
             text: preview::render(&findings, style),
         });
     }
-    apply::write(&project, roots.template, &findings)?;
-    formatter::findings(&project, &findings)?;
-    let revision = source::head(&template)?;
-    manifest::record(&project, config, &revision)?;
-    formatter::manifest(&project)?;
+    let revision = pipeline::apply(&project, &template, config, &findings)?;
     let applied = preview::render(&findings, style);
     let recorded = format!("revision {revision}\n");
     let sections = [

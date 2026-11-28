@@ -37,7 +37,6 @@ esac
         "gh",
         "github-settings",
         "nix",
-        "oxfmt",
         "woodpecker-cli",
         "woodpecker-settings",
     ] {
@@ -114,6 +113,10 @@ fn creates_tracks_and_pushes_project_with_woodpecker() {
         .find("woodpecker-cli repo add 123\n")
         .expect("Woodpecker activation");
     assert!(setup < activate);
+    assert!(calls.contains(
+        "nix run nixpkgs#oxfmt -- --write github-settings.json woodpecker-settings.yaml \
+         template-sync.json README.md package.json\n"
+    ));
     assert!(calls.contains("woodpecker-settings apply\n"));
     assert!(calls.contains("github-settings push\n"));
     let duplicate = create(root);

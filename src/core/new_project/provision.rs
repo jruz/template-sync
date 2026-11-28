@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use super::project::{self, Project};
 use super::scaffold;
+use crate::core::formatter;
 use crate::core::source;
 use crate::libs::git;
 use crate::utils::process;
@@ -16,6 +17,8 @@ pub struct Prepared {
 pub enum Error {
     #[error("destination already exists: {0}")]
     Destination(PathBuf),
+    #[error(transparent)]
+    Formatter(#[from] formatter::Error),
     #[error(transparent)]
     Git(#[from] git::Error),
     #[error("invalid Woodpecker repository information for {0}")]
@@ -154,7 +157,6 @@ fn clone_and_activate(
     }
     scaffold::write(path, project, revision)?;
     let mut files = vec![
-        "--write",
         "github-settings.json",
         "woodpecker-settings.yaml",
         "template-sync.json",
@@ -164,7 +166,7 @@ fn clone_and_activate(
     if matches!(template, project::Template::Typescript) {
         files.push("package.json");
     }
-    process::run("oxfmt", &files, path)?;
+    formatter::files(path, &files)?;
     setup_project(template, path)?;
     activate(path, repository)?;
     Ok(())
@@ -173,7 +175,7 @@ fn clone_and_activate(
 pub fn prepare(project: &Project, parent: &Path, destination: PathBuf) -> Result<Prepared, Error> {
     for helper in [
         "github-settings",
-        "oxfmt",
+        "nix",
         "woodpecker-cli",
         "woodpecker-settings",
     ] {

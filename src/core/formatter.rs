@@ -21,7 +21,7 @@ fn written_structured(finding: &compare::Finding) -> bool {
         && extension.is_some_and(|extension| EXTENSIONS.iter().any(|known| extension == *known))
 }
 
-fn format(project: &Path, files: &[&str]) -> Result<(), Error> {
+pub fn files(project: &Path, files: &[&str]) -> Result<(), Error> {
     let files = files.iter().copied();
     let arguments = COMMAND.into_iter().chain(files).collect::<Vec<_>>();
     process::run(PROGRAM, &arguments, project)?;
@@ -37,10 +37,10 @@ pub fn findings(project: &Path, findings: &[compare::Finding]) -> Result<(), Err
     if written.is_empty() {
         Ok(())
     } else {
-        format(project, &written)
+        files(project, &written)
     }
 }
 
 pub fn manifest(project: &Path) -> Result<(), Error> {
-    format(project, &[manifest::PROJECT_FILE])
+    files(project, &[manifest::PROJECT_FILE])
 }

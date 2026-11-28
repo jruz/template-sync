@@ -122,7 +122,7 @@ template-sync new PROJECT --owner jruz --template rust --visibility private \
 ```
 
 - Authenticate `gh`, SSH, `github-settings`, `woodpecker-cli`, and `woodpecker-settings` first.
-- Install `oxfmt` to format the generated files.
+- Install `nix` to format the generated files with `nixpkgs#oxfmt`.
 - Pass `--description ''` or `--topics ''` to leave those fields empty.
 - Private repositories start without GitHub branch protection or auto-merge so they work on GitHub Free.
 - Install `direnv` before creating a project.
