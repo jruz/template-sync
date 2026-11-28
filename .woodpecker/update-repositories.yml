@@ -13,6 +13,4 @@ steps:
       GITHUB_TOKEN:
         from_secret: GITHUB_TOKEN
     commands:
-      - nix develop --command gh release download --repo jruz/template-sync --pattern template-sync-unknown-linux-musl-x86_64 --output tmp/template-sync --clobber
-      - chmod +x tmp/template-sync
-      - nix develop --command tmp/template-sync update-repositories --account jruz
+      - nix develop --command nix run . -- update-repositories --account jruz
