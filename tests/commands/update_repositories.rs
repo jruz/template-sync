@@ -2,18 +2,13 @@ use std::path::Path;
 use std::process::Output;
 
 use crate::utils::binary::{command, stderr, stdout};
-use crate::utils::env;
 use crate::utils::fixtures::{git, read, remote_project, remotes, write_all};
 
-const FAKE_GH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/bin");
-
 fn update_repositories(origin: &Path, log: &Path, arguments: &[&str]) -> Output {
-    let path = env::path();
     command(origin, origin)
         .arg("update-repositories")
         .args(["--account", "jruz"])
         .args(arguments)
-        .env("PATH", format!("{FAKE_GH}:{path}"))
         .env("GH_LOG", log)
         .env("GH_REMOTES", origin)
         .env("GH_REPOSITORIES", "jruz/project jruz/other")

@@ -2,6 +2,7 @@ pub mod account;
 pub mod apply;
 pub mod compare;
 pub mod detect;
+pub mod formatter;
 pub mod manifest;
 pub mod new_project;
 pub mod preview;

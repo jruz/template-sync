@@ -12,7 +12,8 @@
 - `tests/main.rs`: integration test entrypoint.
 - `tests/commands/`: tests that run the binary, one file per command.
 - `tests/utils/`: shared test helpers.
-- `tests/data/bin/gh`: fake `gh` used by the `update-repositories` tests.
+- `tests/data/bin/`: fake `gh` and `nix` on PATH for all CLI tests.
+- `tests/data/failing/nix`: fake `nix` that fails.
 
 ## Layers
 

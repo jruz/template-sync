@@ -80,7 +80,7 @@ To manage a synced file manually, add its path to the project's `review` array i
 1. Run `template-sync check` to see pending changes.
 2. Inspect `REVIEW` diffs and apply relevant changes manually.
 3. Run `template-sync pull --dry-run` to preview automatic changes.
-4. Run `template-sync pull` to apply automatic changes and advance the recorded revision.
+4. Run `template-sync pull` to apply automatic changes, format written JSON and YAML with `nix run nixpkgs#oxfmt`, and advance the recorded revision.
 5. Run `template-sync check` and confirm `in sync`.
 
 | Command                        | Review-file comparison                                   |

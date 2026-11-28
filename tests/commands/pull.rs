@@ -1,8 +1,11 @@
-use crate::utils::binary::{run, stderr, stdout};
+use crate::utils::binary::{command, run, stderr, stdout};
+use crate::utils::env;
 use crate::utils::fixtures::{
     commit_changes, git, project, project_file, read, remotes, template_directory,
     template_revision, write_all,
 };
+
+const FAILING_BIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/failing");
 
 #[test]
 fn writes_project_and_keeps_review_files() {
@@ -87,6 +90,11 @@ fn syncs_github_policy_and_preserves_repository_settings() {
     commit_changes(&template);
     let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
+    assert_eq!(
+        read(origin, "nix-calls"),
+        "run nixpkgs#oxfmt -- --write github-settings.json\n\
+         run nixpkgs#oxfmt -- --write template-sync.json\n"
+    );
     let text = read(root, "github-settings.json");
     let actual: serde_json::Value = serde_json::from_str(&text).expect("GitHub settings");
     let mut expected = current;
@@ -170,6 +178,11 @@ fn syncs_all_woodpecker_settings_except_repo() {
     assert_eq!(read(root, "woodpecker-settings.yaml"), current);
     let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
+    assert_eq!(
+        read(origin, "nix-calls"),
+        "run nixpkgs#oxfmt -- --write woodpecker-settings.yaml\n\
+         run nixpkgs#oxfmt -- --write template-sync.json\n"
+    );
     let actual = read(root, "woodpecker-settings.yaml");
     let actual: serde_json::Value = serde_norway::from_str(&actual).expect("CI settings");
     let timeout: u32 = 60;
@@ -197,6 +210,24 @@ fn records_template_revision() {
     let updated = run(root, origin, &["pull"]);
     assert!(updated.status.success(), "{}", stderr(&updated));
     assert!(read(root, "template-sync.json").contains(&revision));
+}
+
+#[test]
+fn keeps_revision_when_formatting_fails() {
+    let remotes = remotes();
+    let origin = remotes.path();
+    let project = project(&remotes);
+    let root = project.path();
+    let recorded = read(root, "template-sync.json");
+    let path = env::path();
+    let updated = command(root, origin)
+        .env("PATH", format!("{FAILING_BIN}:{path}"))
+        .arg("pull")
+        .output()
+        .expect("run CLI");
+    assert!(!updated.status.success());
+    assert!(stderr(&updated).contains("nix failed"));
+    assert_eq!(read(root, "template-sync.json"), recorded);
 }
 
 #[test]

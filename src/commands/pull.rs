@@ -1,4 +1,5 @@
 use crate::core::apply;
+use crate::core::formatter;
 use crate::core::manifest;
 use crate::core::preview;
 use crate::core::report;
@@ -11,6 +12,8 @@ use crate::utils::style::Style;
 pub enum Error {
     #[error(transparent)]
     Apply(#[from] apply::Error),
+    #[error(transparent)]
+    Formatter(#[from] formatter::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -39,8 +42,10 @@ pub fn run(dry_run: bool, style: Style) -> Result<Output, Error> {
         });
     }
     apply::write(&project, roots.template, &findings)?;
+    formatter::findings(&project, &findings)?;
     let revision = source::head(&template)?;
     manifest::record(&project, config, &revision)?;
+    formatter::manifest(&project)?;
     let applied = preview::render(&findings, style);
     let recorded = format!("revision {revision}\n");
     let sections = [
